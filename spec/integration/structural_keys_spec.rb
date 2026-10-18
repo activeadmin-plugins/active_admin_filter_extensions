@@ -4,9 +4,9 @@ require "rails_helper"
 require "rack/utils"
 
 # Ransack reads more than conditions out of q: `m` switches the combinator to OR, `g` nests
-# whole condition groups. No Active Admin filter form submits them, and everything here
-# reasons about flat condition keys - so a structural key is not an answer, it is a bypass.
-# They are stripped before anything reads the request.
+# whole condition groups. No Active Admin filter form submits them, and every policy in this
+# gem reasons about flat condition keys - so a structural key is not an answer, it is a
+# bypass. They are stripped before anything reads the request.
 RSpec.describe "structural Ransack keys", type: :feature do
   before do
     Post.create!(title: "keep me", body: "keep body", status: "published",
@@ -19,12 +19,12 @@ RSpec.describe "structural Ransack keys", type: :feature do
     Rack::Utils.parse_nested_query(URI.parse(url).query.to_s)
   end
 
-  it "strips q[m]=or instead of letting it widen the search" do
-    visit "/admin/posts?q%5Bm%5D=or" \
-          "&q%5Bstatus_eq%5D=published&q%5Bpublished_date_gteq%5D=2026-01-01"
+  it "strips q[m]=or instead of letting it turn a required window into a full scan" do
+    visit "/admin/window_posts?q%5Bm%5D=or" \
+          "&q%5Bpublished_date_gteq%5D=2026-05-01&q%5Bpublished_date_lteq%5D=2026-06-30"
 
     expect(query_of(page.current_url)["q"])
-      .to eq("status_eq" => "published", "published_date_gteq" => "2026-01-01")
+      .to eq("published_date_gteq" => "2026-05-01", "published_date_lteq" => "2026-06-30")
     expect(page).to have_content("keep me")
     expect(page).to have_no_content("drop me")
   end
@@ -47,11 +47,11 @@ RSpec.describe "structural Ransack keys", type: :feature do
     expect(page.body).not_to include("drop me")
   end
 
-  it "strips q[g] groupings no one declared" do
-    visit "/admin/posts?q%5Bg%5D%5B0%5D%5Btitle_cont%5D=drop"
+  it "strips q[g] groupings no value policy ever saw" do
+    visit "/admin/guarded_posts?q%5Bg%5D%5B0%5D%5Btitle_cont%5D=keep123"
 
-    expect(query_of(page.current_url)["q"])
-      .to eq("status_eq" => "published", "published_date_gteq" => "2026-01-01")
+    expect(query_of(page.current_url)["q"]).to eq("title_cont" => "keep")
+    expect(page).to have_content("keep me")
     expect(page).to have_no_content("drop me")
   end
 end

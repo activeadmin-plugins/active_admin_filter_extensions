@@ -95,8 +95,28 @@ module ActiveAdminFilterExtensions
         before = result.keys
         add_filter_default_value(result, attribute, options)
         (@filter_default_keys ||= {})[attribute] = result.keys - before
+        # Value policies first: the window must be judged on what the sanitizer stored.
         validate_default_against_value_policies(attribute, options, result, result.keys - before)
+        validate_default_against_policies(attribute, options, result)
       end
+    end
+
+    # A default the filter's own window policy would refuse is a configuration error: on the
+    # non-redirected formats it would run the over-cap scan silently, forever.
+    def validate_default_against_policies(attribute, options, values_by_key)
+      return unless options[:max_range] || options[:min]
+
+      # Looked up by the derived keys, not insertion order: a beginless default fills only the
+      # lteq slot, and judged as a lower bound it would pass as a future-open window.
+      gteq_key, lteq_key = filter_search_keys(attribute, options)
+      from, to = values_by_key.values_at(gteq_key, lteq_key)
+      return if from.nil? && to.nil?
+
+      violation = window_violation(options, from, to)
+      return unless violation
+
+      raise ArgumentError,
+            "filter :#{attribute} declares a default that violates its own window policy "             "(#{violation.first}) - the fallback must satisfy max_range:/min:"
     end
 
     # A default the filter's own validate: would refuse is the same configuration error: it

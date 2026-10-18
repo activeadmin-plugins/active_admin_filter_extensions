@@ -101,10 +101,11 @@ module ActiveAdminFilterExtensions
         return if q.blank? || !q.respond_to?(:each_pair)
 
         visible_filters.each do |attribute, options|
-          next unless options.values_at(:sanitize, :validate).any?
+          next unless options.values_at(:sanitize, :validate, :max_range, :min).any?
 
           keys = filter_search_keys(attribute, options)
           enforce_scalar_policies(q, attribute, options, keys)
+          enforce_window_policies(q, attribute, options, keys)
         end
       end
 
@@ -118,7 +119,7 @@ module ActiveAdminFilterExtensions
             # Ransack executes a Hash- or Array-wrapped value byte-identically to the scalar;
             # a policed key that is not a plain string is a bypass, not a shape to ignore.
             unless value.is_a?(String)
-              apply_invalid_filter_policy(attribute, options, [key], :invalid)
+              apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), :invalid)
               next
             end
 
@@ -144,8 +145,90 @@ module ActiveAdminFilterExtensions
 
             message = ::MethodOrProcHelper.render_in_context(self, Validators.resolve(validator), value)
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.
-            apply_invalid_filter_policy(attribute, options, [key], message) if message
+            apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), message) if message
           end
+      end
+
+      # On a window-policied filter a value violation resets ALL its keys, not just the
+      # offender: half the admin's window completed from the default pair is a window nobody
+      # asked for and nothing validated.
+      def scalar_reset_scope(options, keys, key)
+        options[:max_range] || options[:min] ? keys : [key]
+      end
+
+      # `max_range:` / `min:` treat the two bounds as one window: a violation drops the PAIR -
+      # a bad gteq with a good lteq is still not the range the admin meant - and the declared
+      # default refills.
+      def enforce_window_policies(q, attribute, options, keys)
+        return unless options[:max_range] || options[:min]
+
+        unless keys.size == 2
+          raise ArgumentError,
+                "filter :#{attribute} declares max_range:/min: but its input submits "                 "#{keys.join(' and ')} - a window policy needs a two-ended input"
+        end
+
+        from_raw, to_raw = q.values_at(*keys)
+        return if from_raw.blank? && to_raw.blank?
+
+        violation = window_violation(options, from_raw, to_raw)
+        return unless violation
+
+        # The fallback's own sanity is checked once, at default materialization - in every
+        # mode, not only on the resetting path.
+        apply_invalid_filter_policy(attribute, options, keys, violation.first, violation.last)
+      end
+
+      def window_violation(options, from_raw, to_raw)
+        from = parse_window_bound(from_raw)
+        to   = parse_window_bound(to_raw)
+
+        return [:range_invalid, {}] if (from_raw.present? && from.nil?) || (to_raw.present? && to.nil?)
+        return [:range_invalid, {}] if from && to && from > to
+
+        if (floor = options[:min])
+          # in_time_zone, not to_time: the bounds are parsed in Time.zone, and Date#to_time
+          # speaks the SERVER zone - apart, a floor-equal bound is off by the offset.
+          floor = ::MethodOrProcHelper.render_in_context(self, floor).in_time_zone
+          if [from, to].compact.any? { |bound| bound < floor }
+            return [:before_floor, { floor: floor.to_date }]
+          end
+        end
+
+        if (max = options[:max_range])
+          # An upper bound alone is an infinitely wide window - the outage query the cap
+          # exists to refuse.
+          return [:range_too_wide, { limit: (max / 1.day).to_i }] if from.nil? && to
+
+          if from
+            # An open upper bound is measured against now; a FUTURE lower bound with no upper
+            # bound selects a not-yet-written window and passes - measuring it against now
+            # would read it as inverted.
+            return nil if to.nil? && from >= Time.current
+            return [:range_too_wide, { limit: (max / 1.day).to_i }] if (to || Time.current) - from > max
+          end
+        end
+
+        # A min: standing alone still refuses a window with no lower bound - everything
+        # before the floor is the query the floor exists to refuse. After max_range:, whose
+        # too-wide verdict is the more actionable one when both are declared.
+        if from.nil? && to && (floor = options[:min])
+          floor = ::MethodOrProcHelper.render_in_context(self, floor).in_time_zone
+          return [:before_floor, { floor: floor.to_date }]
+        end
+
+        nil
+      end
+
+      def parse_window_bound(raw)
+        return nil if raw.blank?
+        # An Array/Hash-wrapped bound would date-parse via #to_s while Ransack silently drops
+        # the wrapped condition - a bypass, not a date. Non-String time-likes stay parseable:
+        # defaults materialize as Time/Date objects.
+        return nil unless raw.is_a?(String) || raw.respond_to?(:to_time)
+
+        Time.zone.parse(raw.to_s)
+      rescue ArgumentError, TypeError
+        nil
       end
 
       # What a violated policy does, by name. :reset (the only one yet) drops the key(s) and

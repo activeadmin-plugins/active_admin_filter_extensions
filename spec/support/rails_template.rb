@@ -32,6 +32,13 @@ gsub_file "config/environment.rb",
           "$LOAD_PATH.unshift('#{gem_lib}')\n" \
           "require \"active_admin_filter_extensions\"\n"
 
+file "config/locales/filter_extensions.en.yml", <<~YAML
+  # Overrides one gem message the i18n way - the suite proves the seam.
+  en:
+    active_admin_filter_extensions:
+      before_floor: "%{filter}: starts no earlier than %{floor} (retention)."
+YAML
+
 generate :"active_admin:install --skip-users"
 generate :"formtastic:install"
 
@@ -218,6 +225,44 @@ file "app/admin/posts.rb", <<~RUBY
                               extensions: { required: true, default: -> { Date.new(2026, 5, 1).. } }
     end
 
+    ActiveAdmin.register Post, as: "WindowPost" do
+      default_filters_notice "Showing the default window"
+
+      # The capped window: never unbounded (required:), never wider than the cap, never before
+      # the retention floor - the didww-rs/pbx/nessie range guards, as options.
+      filter :published_date, as: :date_range,
+                              extensions: { required: true,
+                                        max_range: 90.days,
+                                        min: -> { Date.new(2020, 6, 1) },
+                                        default: -> { Date.new(2026, 5, 1)..Date.new(2026, 6, 30) } }
+    end
+
+    ActiveAdmin.register Post, as: "FloorPost" do
+      # min: standing alone: a window with no lower bound scans everything before the
+      # retention floor - the exact query the floor exists to refuse.
+      filter :published_date, as: :date_range,
+                              extensions: { min: -> { Date.new(2020, 6, 1) },
+                                            default: -> { Date.new(2026, 5, 1)..Date.new(2026, 6, 30) } }
+    end
+
+    ActiveAdmin.register Post, as: "ValidatedWindowPost" do
+      # Value AND window policies with a default: a scalar reset must not leave half the
+      # admin's window to be completed from the default pair unchecked.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 90.days,
+                                            validate: ->(value) { value.include?("X") && "No X dates." },
+                                            default: -> { Date.new(2026, 5, 1)..Date.new(2026, 6, 30) } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaSanitizedWindowPost" do
+      # Its sanitizer widens a bound past the cap AFTER the declared range looks innocent -
+      # the window must be judged on what is actually stored.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 90.days,
+                                            sanitize: ->(value) { value == "2026-02-01" ? "2026-12-31" : value },
+                                            default: -> { Date.new(2026, 1, 1)..Date.new(2026, 2, 1) } }
+    end
+
     ActiveAdmin.register Post, as: "BananaSanitizeBuiltinPost" do
       # An unknown built-in name must raise, not fall through to a controller method call.
       filter :title_cont, as: :string, extensions: { sanitize: :shout }
@@ -252,6 +297,21 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title_cont, as: :string,
                           extensions: { default: "v1",
                                     validate: ->(value) { value.match?(/\\d/) && "no digits" } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaBeginlessWindowPost" do
+      # Its beginless default is unbounded below the cap - the suite proves that raises
+      # instead of silently running the over-cap scan on every bare visit.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 90.days,
+                                        default: -> { (..(Date.current + 1)) } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaWindowPost" do
+      # Its default violates its own cap - the suite proves that raises instead of looping.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 90.days,
+                                        default: -> { Date.new(2026, 1, 1).. } }
     end
 
     ActiveAdmin.register Post, as: "BananaSanitizePost" do

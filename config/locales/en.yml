@@ -3,3 +3,6 @@
 en:
   active_admin_filter_extensions:
     invalid: "%{filter} filter has an invalid value."
+    range_invalid: "%{filter} filter has an invalid date range value."
+    range_too_wide: "%{filter} filter allows a maximum date range of %{limit} days."
+    before_floor: "%{filter} filter cannot start before %{floor}."
