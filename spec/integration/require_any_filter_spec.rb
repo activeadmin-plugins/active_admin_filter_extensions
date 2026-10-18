@@ -89,6 +89,24 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_content("drop me")
   end
 
+  it "treats a scope no resource declares as unasked" do
+    # Active Admin resolves an unknown scope id to nothing and applies no scope, so counting
+    # its mere presence hands back the whole table behind a scope-shaped URL.
+    visit "/admin/picky_posts?scope=does_not_exist"
+
+    expect(page).to have_content("You must specify at least one filter")
+    expect(page).to have_no_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "treats a scope no resource declares as unasked on CSV too" do
+    # The format that gets no canonicalizing hop - and no warning to read either.
+    visit "/admin/picky_posts.csv?scope=does_not_exist"
+
+    expect(page.body).not_to include("keep me")
+    expect(page.body).not_to include("drop me")
+  end
+
   it "counts a sibling predicate of a declared filter as asked" do
     visit "/admin/picky_posts?q%5Btitle_eq%5D=keep%20me"
 

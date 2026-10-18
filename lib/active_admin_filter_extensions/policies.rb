@@ -151,8 +151,11 @@ module ActiveAdminFilterExtensions
       # when it carries a real predicate on a declared filter's attribute.
       def any_declared_filter_answered?
         # A scope tab is a question, and the one Active Admin puts a count on: answering it
-        # with an empty page and "specify at least one filter" contradicts the tab.
-        return true if params[:scope].present?
+        # with an empty page and "specify at least one filter" contradicts the tab. One Active
+        # Admin actually resolves, though - #current_scope is nil for an id no resource
+        # declares, and an unresolved scope narrows nothing, so counting its mere presence
+        # hands back the whole table behind a scope-shaped URL.
+        return true if params[:scope].present? && current_scope.present?
 
         exact = visible_filters.flat_map { |attribute, options| policy_search_keys(attribute, options) }
         bases = exact.map { |key| strip_ransack_predicate(key) }
