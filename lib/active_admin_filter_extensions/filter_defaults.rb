@@ -8,6 +8,12 @@ module ActiveAdminFilterExtensions
   # resource is meant to be able to override the seams here in its own `controller do` block.
   # The one method that does replace Active Admin's is in DataAccess.
   module FilterDefaults
+    # Ransack reads more than conditions out of q: `m` switches the combinator to OR - turning
+    # a required, capped window into `window OR anything` - and `g` nests whole condition
+    # groups no value policy ever saw. No Active Admin filter form submits them; here they are
+    # a bypass, not an answer, and they are stripped before anything reads the request.
+    RANSACK_STRUCTURE = %w[m g c s conditions sorts groupings combinator].freeze
+
     protected
 
     # The filter values the collection is searched with. Override to change what the index
@@ -40,8 +46,10 @@ module ActiveAdminFilterExtensions
     # sends no `q` at all, because the form disables empty fields on submit, so `commit` is
     # what tells "show me everything" apart from a first visit. Clearing the filters drops
     # `commit` along with `q`, so Clear Filters returns the page to its declared defaults.
+    # Judged on the NORMALIZED request: a q holding nothing but blanks or structural keys is
+    # a bare request on every format - the CSV gets no canonicalizing hop to say otherwise.
     def filter_defaults_apply?
-      params[:q].blank? && params[:commit].blank?
+      requested_filtering_params.blank? && params[:commit].blank?
     end
 
     # @return [Hash] the search values declared with `filter ..., default:`
@@ -64,8 +72,14 @@ module ActiveAdminFilterExtensions
 
       # A blank value is no answer: Ransack strips it before searching, so letting it clobber
       # a default in the merge - or count as "this key was answered" for a required: window -
-      # turns ?q[k]= into a full-table scan wearing an answered-looking URL.
-      requested.reject { |_, value| value.blank? && value != false }
+      # turns ?q[k]= into a full-table scan wearing an answered-looking URL. An Array answers
+      # with what is left of it once ITS blanks are gone: [""] is as empty as "".
+      requested = requested.transform_values do |value|
+        value.is_a?(Array) ? value.reject { |element| element.blank? && element != false } : value
+      end
+      requested.reject do |key, value|
+        RANSACK_STRUCTURE.include?(key.to_s) || (value.blank? && value != false)
+      end
     end
 
     # A default is a value, and where that value goes is the input's business - see SearchKeys.
