@@ -1,15 +1,44 @@
 # active_admin_filter_extensions
 
-Default values for Active Admin index filters.
+Declarative extensions for Active Admin index filters: defaults, mandatory windows, value
+policies and honest URLs - one `extensions:` option on the filter instead of a hand-rolled
+`before_action` mutating `params[:q]`.
+
+```ruby
+filter :created_at, as: :date_time_range,
+       extensions: { required: { unless: %i[id_eq uuid_eq] },  # the window every request gets...
+                     default:   -> { 1.day.ago.beginning_of_day.. },  # ...and what it defaults to
+                     max_range: 90.days }                      # wider is refused, loudly
+```
+
+**What ships:**
+
+* [`default:`](#usage) - the filter's default value: scalar, Range, Hash of predicates, or a
+  per-request Proc; applied to a bare visit, absent from one the admin filtered themselves.
+* [`required:`](#required-filters-the-mandatory-window) - the mandatory window: the default
+  applies whenever the filter's keys are absent, whatever else the request carries;
+  `{ if:/unless: key(s) }` names the searches that switch it on or off.
+* [`with:`](#filters-that-only-make-sense-together) - all-or-none groups (year with month):
+  half an answer resets to the defaults with a warning.
+* [`sanitize:` / `validate:`](#value-policies-sanitize-and-validate) - strip what typing drags
+  in, refuse what the search cannot mean; built-ins `:digits`, `:integer`, `:ip`.
+* [`on_invalid:`](#on_invalid-what-a-violated-policy-does) - what a violation does: `:reset`
+  (drop + refill the default), `:reject` (bounce back), `:empty` (render nothing, keep the input).
+* [`max_range:` / `min:`](#window-policies-max_range-and-min) - range caps and retention
+  floors on two-ended filters.
+* [`message:`](#value-policies-sanitize-and-validate) and plain-i18n defaults for every
+  violation text.
+* [`default_filters_notice`](#telling-the-admin-why) - the flash that tells the admin why the
+  page shows a slice; [`require_any_filter`](#resource-level-guard) - an index that waits to
+  be asked.
+* [The redirect](#the-redirect) - a bare HTML visit answers with one 302 to itself with the
+  effective filters spelled out, so a copied URL shows the same page to whoever opens it.
 
 Some index pages are not "a list you may want to narrow down", they are "a list that is only
 meaningful, or only affordable, inside a window": a log table partitioned by date, a page backed
 by an external service that will not answer an unbounded query, a queue an agent should land on.
 Active Admin has no way to say so, so every app of this size grows a `before_action` that mutates
-`params[:q]`. This is that, as an option on the filter itself - and a URL that means the page:
-a bare HTML visit to the index answers with one redirect to itself, the effective filters
-spelled out in the query string, so the address the admin copies shows the same page to
-whoever opens it.
+`params[:q]`. This is that, as options on the filter itself.
 
 ```ruby
 ActiveAdmin.register Order do
@@ -23,7 +52,7 @@ end
 gem "active_admin_filter_extensions", github: "activeadmin-plugins/active_admin_filter_extensions"
 ```
 
-Pre-1.0 and not on RubyGems yet: the option name and the shape of its value may still change.
+Not on RubyGems yet; pin the tag.
 
 ## Usage
 
