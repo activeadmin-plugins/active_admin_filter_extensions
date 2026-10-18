@@ -284,6 +284,8 @@ module ActiveAdminFilterExtensions
               next
             end
 
+            value = value.reject(&:blank?) if value.is_a?(Array)
+
             if (sanitizer = options[:sanitize])
               sanitizer = Sanitizers.resolve(sanitizer)
               sanitized = sanitize_policed_value(attribute, sanitizer, value)
@@ -294,11 +296,10 @@ module ActiveAdminFilterExtensions
             next unless (validator = options[:validate])
 
             validator = Validators.resolve(validator)
-            # Blank ELEMENTS are the ones #requested_filtering_params discards before searching -
-            # ?q[k][]=&q[k][]=draft is the shape a multi-select submits - so judging one refuses
-            # a value nothing searches and resets a legitimate selection. A blank scalar is a
-            # different thing and still judged: the sanitizer may have just emptied it.
-            elements = value.is_a?(Array) ? value.reject(&:blank?) : [value]
+            # Blank input array elements are discarded before searching - ?q[k][]=&q[k][]=draft
+            # is the shape a multi-select submits - so remove them before sanitizing. Sanitized
+            # elements are all judged, including ones the sanitizer emptied.
+            elements = value.is_a?(Array) ? value : [value]
             message = elements.lazy
                               .filter_map { |element| ::MethodOrProcHelper.render_in_context(self, validator, element) }.first
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.

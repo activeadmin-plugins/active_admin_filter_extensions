@@ -94,6 +94,16 @@ RSpec.describe "on_invalid policies", type: :feature do
       expect(page).to have_no_content("drop me")
     end
 
+    it "validates array elements emptied by the sanitizer and preserves the original input" do
+      visit "/admin/empty_digits_posts?q%5Bposition_eq%5D%5B%5D=abc"
+
+      expect(page).to have_content("filter has an invalid value")
+      expect(query_of(page.current_url)["q"]).to eq("position_eq" => ["abc"])
+      expect(page).to have_field("q[position_eq]", with: "0")
+      expect(page).to have_no_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
     it "leaves a valid search alone" do
       visit "/admin/empty_posts?q%5Btitle_cont%5D=drop"
 

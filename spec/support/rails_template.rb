@@ -107,6 +107,11 @@ file "app/admin/posts.rb", <<~RUBY
                                     } }
     end
 
+    ActiveAdmin.register Post, as: "IntegerSanitizedBoxesPost" do
+      filter :position, as: :check_boxes, collection: [1, 20],
+                        extensions: { sanitize: ->(value) { Integer(value, 10).to_s }, validate: :integer }
+    end
+
     ActiveAdmin.register Post, as: "NilMemberPolicedPost" do
       # An Array default with a blank member beside a real one - `[current_admin_user.team,
       # "published"]` for an admin with no team. The blank is not a value the request would
