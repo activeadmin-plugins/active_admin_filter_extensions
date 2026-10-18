@@ -11,6 +11,22 @@ module ActiveAdminFilterExtensions
     # form is given anything.
     NOT_FOR_INPUT = %i[extensions if unless].freeze
     EXTENSION_KEYS = %i[default required with sanitize validate on_invalid max_range min message].freeze
+    # required: and min: are documented Formtastic input options in their own right. The gem
+    # answers to them only INSIDE extensions:, so flat they are the host's: no stray-key raise,
+    # no policy, straight through to the input.
+    HOST_INPUT_KEYS = %i[required min].freeze
+    STRAY_KEYS = (EXTENSION_KEYS - HOST_INPUT_KEYS).freeze
+    # Where #merge_filter_extensions parks the host's own required:/min:, out of reach of the
+    # gem's flat reads until #input_options hands them back to the input.
+    HOST_INPUT_OPTIONS = :extensions_host_input_options
+
+    # What the form may see: the gem's container and conditions out, the keys the container
+    # itself declared out, and the host's own options back in.
+    def self.input_options(options)
+      options.except(*NOT_FOR_INPUT, HOST_INPUT_OPTIONS,
+                     *(options[:extensions] || {}).keys.map(&:to_sym))
+             .merge(options[HOST_INPUT_OPTIONS] || {})
+    end
 
     protected
 
@@ -31,7 +47,7 @@ module ActiveAdminFilterExtensions
     # (required:, most notably). Internally the sub-hash merges flat; a gem key left outside
     # extensions: raises rather than silently meaning something else to Formtastic.
     def merge_filter_extensions(attribute, options)
-      stray = options.keys.map(&:to_sym) & EXTENSION_KEYS
+      stray = options.keys.map(&:to_sym) & STRAY_KEYS
       if stray.any?
         raise ArgumentError, "filter :#{attribute}: #{stray.map(&:inspect).join(', ')} "                              "belong inside extensions: { ... }"
       end
@@ -42,7 +58,11 @@ module ActiveAdminFilterExtensions
         raise ArgumentError, "filter :#{attribute}: unknown extensions: #{unknown.map(&:inspect).join(', ')} - "                              "the gem ships #{EXTENSION_KEYS.map(&:inspect).join(', ')}"
       end
 
-      options.merge(extensions)
+      # The host's own required:/min: are parked rather than merged: left in, the gem would read
+      # a flat min: as a window policy on an input that submits one key.
+      host = options.slice(*HOST_INPUT_KEYS)
+      merged = options.except(*HOST_INPUT_KEYS).merge(extensions)
+      host.any? ? merged.merge(HOST_INPUT_OPTIONS => host) : merged
     end
   end
 end

@@ -280,6 +280,12 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title_cont, as: :string, default: "keep"
     end
 
+    ActiveAdmin.register Post, as: "HostOptionPost" do
+      # required: and min: are Formtastic input options in their own right. The gem answers to
+      # them only inside extensions:, so flat they belong to the form - not to a window policy.
+      filter :position, as: :number, required: true, min: 0
+    end
+
     ActiveAdmin.register Post, as: "BananaPolicyKeyPost" do
       # A typo inside extensions: raises instead of silently guarding nothing.
       filter :title_cont, as: :string, extensions: { defult: "keep" }

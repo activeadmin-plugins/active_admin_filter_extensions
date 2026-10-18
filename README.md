@@ -54,6 +54,25 @@ gem "active_admin_filter_extensions", github: "activeadmin-plugins/active_admin_
 
 Not on RubyGems yet; pin the tag.
 
+## The extensions: container
+
+Everything this gem adds lives under one filter option, so its names can never collide with
+Formtastic's. A gem key left flat raises rather than quietly meaning something else:
+
+```ruby
+filter :title_cont, as: :string, extensions: { default: "acme" }   # right
+filter :title_cont, as: :string, default: "acme"                  # raises
+```
+
+With one carve-out: `required:` and `min:` are Formtastic input options in their own right, so
+flat they belong to the form and pass through untouched. This gem answers to them only inside
+`extensions:`.
+
+```ruby
+filter :position, as: :number, min: 0                          # Formtastic's - renders min="0"
+filter :created_at, as: :date_range, extensions: { min: -> { 2.months.ago } }  # the gem's floor
+```
+
 ## Usage
 
 A default is a **value**. Which Ransack key it lands under is the input's business, and the
