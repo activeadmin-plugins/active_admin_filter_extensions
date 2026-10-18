@@ -48,11 +48,30 @@ module ActiveAdminFilterExtensions
     # whose unless: keys.
     def required_filter_defaults_absent_from(requested)
       required_filter_default_values.each_with_object({}) do |(_attribute, entry), result|
-        next if entry[:keys].any? { |key| requested[key].present? }
+        next if required_group_answered?(requested, entry[:keys])
         next if entry[:if].any? && entry[:if].none? { |key| requested[key].present? }
         next if entry[:unless].any? { |key| requested[key].present? }
 
         result.merge!(entry[:defaults])
+      end
+    end
+
+    # Any predicate of the filter's own attribute is an answer about it - the admin picking
+    # "equals" on a :string filter submits title_eq where the derived key is title_cont, and
+    # completing that from the default searches two conditions on one column. Read exactly the
+    # way #any_declared_filter_answered? reads a question: an exact declared key, or a real
+    # predicate on the declared attribute - never a predicate-less stem Ransack ignores, which
+    # would switch a mandatory window off with a key that searches nothing.
+    def required_group_answered?(requested, keys)
+      bases = keys.map { |key| strip_ransack_predicate(key) }
+
+      requested.any? do |key, value|
+        next false unless value.present?
+
+        key = key.to_s
+        next true if keys.include?(key)
+
+        key != strip_ransack_predicate(key) && bases.include?(strip_ransack_predicate(key))
       end
     end
   end

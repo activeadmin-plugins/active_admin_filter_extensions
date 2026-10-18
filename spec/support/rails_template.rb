@@ -232,6 +232,14 @@ file "app/admin/posts.rb", <<~RUBY
                       extensions: { default: "published", required: { if: :title_cont } }
     end
 
+    ActiveAdmin.register Post, as: "RequiredSiblingPost" do
+      default_filters_notice "Showing kept titles by default"
+
+      # A :string filter carries the predicate dropdown: picking "equals" submits title_eq
+      # where the derived key is title_cont. Both are answers about the same column.
+      filter :title, extensions: { default: "keep", required: true }
+    end
+
     ActiveAdmin.register Post, as: "RequiredBananaPost" do
       # required with nothing to fall back on - the suite proves that raises.
       filter :title_cont, as: :string, extensions: { required: true }
