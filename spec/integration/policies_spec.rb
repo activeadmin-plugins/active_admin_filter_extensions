@@ -93,6 +93,37 @@ RSpec.describe "Filter value policies", type: :feature do
     end
   end
 
+  describe "a multi-valued filter" do
+    it "lets its Array submission through" do
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5B%5D=draft"
+
+      expect(page).to have_no_content("No x statuses.")
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("keep me")
+    end
+
+    it "judges each element and resets the key on a bad one" do
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5B%5D=draft&q%5Bstatus_in%5D%5B%5D=xdraft"
+
+      expect(page).to have_content("No x statuses.")
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
+    it "still refuses a Hash-wrapped value on the same filter" do
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5Bvalue%5D=draft"
+
+      expect(page).to have_content("has an invalid value")
+    end
+
+    it "materializes an Array default beside its validator" do
+      visit "/admin/policed_boxes_posts"
+
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+  end
+
   describe "message: overrides the violation text" do
     it "speaks the filter's own words for a built-in validator" do
       visit "/admin/ip_guarded_posts?q%5Btitle_cont%5D=not-an-ip"

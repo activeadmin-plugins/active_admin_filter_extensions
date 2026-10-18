@@ -95,6 +95,18 @@ file "app/admin/posts.rb", <<~RUBY
       filter :status, as: :check_boxes, collection: %w[draft published], extensions: { default: ["published"] }
     end
 
+    ActiveAdmin.register Post, as: "PolicedBoxesPost" do
+      # A multi-valued filter under a value policy: _in[] submits an Array of Strings, which
+      # is the shape this input legitimately has - not a bypass.
+      filter :status, as: :check_boxes, collection: %w[draft published],
+                      extensions: { default: ["published"],
+                                    validate: lambda { |value|
+                                      next "Letters only." unless value.match?(/\\A[a-z]+\\z/)
+
+                                      "No x statuses." if value.start_with?("x")
+                                    } }
+    end
+
     ActiveAdmin.register Post, as: "BooleanPost" do
       filter :starred, extensions: { default: true }
     end

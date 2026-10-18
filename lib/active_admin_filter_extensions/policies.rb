@@ -231,34 +231,26 @@ module ActiveAdminFilterExtensions
 
             original = value
 
-            # Ransack executes a Hash- or Array-wrapped value byte-identically to the scalar;
-            # a policed key that is not a plain string is a bypass, not a shape to ignore.
-            unless value.is_a?(String)
+            # A `:check_boxes` or multi-select filter submits an Array of Strings - the shape
+            # that input legitimately has - so the policies judge it element by element. Any
+            # other shape (a Hash, a nested Array) executes byte-identically to the scalar on
+            # Ransack's side and is a bypass, not a shape to ignore.
+            unless policed_value_shape?(value)
               apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), :invalid)
               next
             end
 
             if (sanitizer = options[:sanitize])
               sanitizer = Sanitizers.resolve(sanitizer)
-              # On dup'd copies: a sanitizer that mutates in place and returns the same
-              # object would otherwise be compared against itself and wave its loop through.
-              sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.dup).to_s
-              # The sanitized value lands in the URL and comes back for
-              # another pass - a sanitizer that keeps rewriting its own output redirect-loops
-              # the index into unreachability. Catch it on the first request instead.
-              if sanitized != value &&
-                 ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
-                raise ArgumentError,
-                      "filter :#{attribute}'s sanitize: is not idempotent "                       "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - "                       "that is an infinite redirect"
-              end
-
+              sanitized = sanitize_policed_value(attribute, sanitizer, value)
               value = sanitized
               q[key] = value
             end
 
             next unless (validator = options[:validate])
 
-            message = ::MethodOrProcHelper.render_in_context(self, Validators.resolve(validator), value)
+            validator = Validators.resolve(validator)
+            message = Array(value).lazy.filter_map { |element| ::MethodOrProcHelper.render_in_context(self, validator, element) }.first
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.
             next unless message
 
@@ -267,6 +259,32 @@ module ActiveAdminFilterExtensions
             q[key] = original if options.fetch(:on_invalid, :reset) == :empty
             apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), message)
           end
+      end
+
+      # A String, or an Array of Strings - what a multi-valued input submits.
+      def policed_value_shape?(value)
+        value.is_a?(String) || (value.is_a?(Array) && value.all?(String))
+      end
+
+      # Element-wise for an Array, so a multi-valued filter is sanitized the way it is
+      # submitted. On dup'd copies: a sanitizer that mutates in place and returns the same
+      # object would otherwise be compared against itself and wave its loop through.
+      def sanitize_policed_value(attribute, sanitizer, value)
+        return value.map { |element| sanitize_policed_value(attribute, sanitizer, element) } if value.is_a?(Array)
+
+        sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.dup).to_s
+        # The sanitized value lands in the URL and comes back for another pass - a sanitizer
+        # that keeps rewriting its own output redirect-loops the index into unreachability.
+        # Catch it on the first request instead.
+        if sanitized != value &&
+           ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
+          raise ArgumentError,
+                "filter :#{attribute}'s sanitize: is not idempotent " \
+                "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
+                "that is an infinite redirect"
+        end
+
+        sanitized
       end
 
       # On a window-policied filter a value violation resets ALL its keys, not just the

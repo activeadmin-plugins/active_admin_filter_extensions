@@ -163,29 +163,44 @@ module ActiveAdminFilterExtensions
         value = result[key]
         next if value.nil?
 
-        # Scalar values go through as the String the URL will say - a -20 under :digits must
-        # search as "20" on every format. Multi-valued defaults are not scalar submissions.
-        if sanitizer && !value.is_a?(Enumerable)
+        # Judged the way the URL will say it: a scalar as the String it becomes, an Array
+        # element by element - the shape a multi-valued input submits.
+        if sanitizer
           resolved = Policies::Sanitizers.resolve(sanitizer)
-          sanitized = ::MethodOrProcHelper.render_in_context(self, resolved, value.to_s.dup).to_s
-          # The same fixpoint check submitted values face: without it the CSV searches the
-          # once-sanitized value while the HTML converges on another, and nobody raises.
-          if ::MethodOrProcHelper.render_in_context(self, resolved, sanitized.dup).to_s != sanitized
-            raise ArgumentError,
-                  "filter :#{attribute}'s sanitize: is not idempotent " \
-                  "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
-                  "a default must sanitize to a fixpoint"
-          end
-
-          result[key] = sanitized
+          result[key] = sanitize_default_value(attribute, resolved, value)
         end
         next unless validator
-        next unless ::MethodOrProcHelper.render_in_context(self, Policies::Validators.resolve(validator), result[key].to_s)
+
+        resolved_validator = Policies::Validators.resolve(validator)
+        next unless default_value_strings(result[key])
+                    .any? { |string| ::MethodOrProcHelper.render_in_context(self, resolved_validator, string) }
 
         raise ArgumentError,
               "filter :#{attribute} declares a default that violates its own validate: " \
               "policy - the fallback must be a value the filter accepts"
       end
+    end
+
+    # An Array default is submitted element by element; anything else as one String.
+    def default_value_strings(value)
+      value.is_a?(Array) ? value.map(&:to_s) : [value.to_s]
+    end
+
+    def sanitize_default_value(attribute, sanitizer, value)
+      return value.map { |element| sanitize_default_value(attribute, sanitizer, element) } if value.is_a?(Array)
+      return value if value.is_a?(Enumerable)
+
+      sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.to_s.dup).to_s
+      # The same fixpoint check submitted values face: without it the CSV searches the
+      # once-sanitized value while the HTML converges on another, and nobody raises.
+      if ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
+        raise ArgumentError,
+              "filter :#{attribute}'s sanitize: is not idempotent " \
+              "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
+              "a default must sanitize to a fixpoint"
+      end
+
+      sanitized
     end
 
     private
