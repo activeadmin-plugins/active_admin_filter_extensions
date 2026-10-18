@@ -26,7 +26,20 @@ module ActiveAdminFilterExtensions
     # @return [Hash, ActionController::Parameters] values passed to Ransack
     def filtering_params
       requested = requested_filtering_params
-      defaults = filter_defaults_apply? ? filter_default_values : {}
+      # Materialized on every path: computing it is also what validates, loudly, that every
+      # required: filter has a default: to fall back on.
+      required_filter_default_values
+
+      defaults =
+        if filter_defaults_apply?
+          filter_default_values
+        else
+          # A filter marked required: applies when ALL its own keys are absent. A request that
+          # touched any of them - a half-range included - said what it wants there; completing
+          # it from the default could manufacture a pair the admin never meant (an inverted
+          # range, say). What a half-open range may not mean is max_range:'s business.
+          required_filter_defaults_absent_from(requested || {})
+        end
 
       defaults = defaults.merge(reset_filter_default_values)
       return requested || {} if defaults.blank?
@@ -43,11 +56,17 @@ module ActiveAdminFilterExtensions
     end
 
     # Whether any default actually reaches this request's search - what the notice announces.
+    # Wider than #filter_defaults_apply?: a required filter engages on a partly-filtered
+    # request too, as long as the request left its keys blank.
     def filter_defaults_engaged?
       requested = requested_filtering_params || {}
-      # At least one default must actually reach the search: a widened apply? beside a
-      # request that answered every defaulted key itself engaged nothing.
-      filter_defaults_apply? && filter_default_values.keys.any? { |key| requested[key].nil? }
+      if filter_defaults_apply?
+        # At least one default must actually reach the search: a widened apply? beside a
+        # request that answered every defaulted key itself engaged nothing.
+        return filter_default_values.keys.any? { |key| requested[key].nil? }
+      end
+
+      required_filter_defaults_absent_from(requested).any?
     end
 
     # Whether the request is one the declared defaults should apply to. Override to widen it -
@@ -75,6 +94,7 @@ module ActiveAdminFilterExtensions
 
         before = result.keys
         add_filter_default_value(result, attribute, options)
+        (@filter_default_keys ||= {})[attribute] = result.keys - before
         validate_default_against_value_policies(attribute, options, result, result.keys - before)
       end
     end

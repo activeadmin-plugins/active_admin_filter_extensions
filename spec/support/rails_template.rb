@@ -13,7 +13,7 @@ generate :model,
 
 inject_into_file "app/models/post.rb",
                  "  def self.ransackable_attributes(auth_object = nil)\n" \
-                 "    %w[title body status position published_date starred]\n" \
+                 "    %w[id title body status position published_date starred]\n" \
                  "  end\n" \
                  "  def self.ransackable_associations(auth_object = nil)\n" \
                  "    []\n" \
@@ -177,6 +177,45 @@ file "app/admin/posts.rb", <<~RUBY
                           extensions: { default: "keep",
                                     sanitize: ->(value) { value.delete("-") },
                                     validate: ->(value) { value.match?(/\\d/) && "Title filter must not contain digits." } }
+    end
+
+    ActiveAdmin.register Post, as: "RequiredPost" do
+      default_filters_notice "Showing published posts by default"
+
+      filter :id_eq, as: :string, label: "ID"
+      filter :title_cont, as: :string
+      # unless: - a search that names a unique record; the window steps aside for it.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", required: { unless: %i[id_eq] } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaRequiredOptionPost" do
+      # An unknown required: option must raise, not silently mean true.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", required: { iff: %i[title_cont] } }
+      filter :title_cont, as: :string
+    end
+
+    ActiveAdmin.register Post, as: "PinnedWindowPost" do
+      default_filters_notice "Showing published posts by default"
+
+      filter :position
+      filter :title_cont, as: :string
+      # if: - the window matters only beside these keys; alone they scan too broadly.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", required: { if: :title_cont } }
+    end
+
+    ActiveAdmin.register Post, as: "RequiredBananaPost" do
+      # required with nothing to fall back on - the suite proves that raises.
+      filter :title_cont, as: :string, extensions: { required: true }
+    end
+
+    ActiveAdmin.register Post, as: "RequiredOpenPost" do
+      # A required window with an endless default: the group is answered by ANY of the
+      # filter's own keys, not only the ones the default happens to fill.
+      filter :published_date, as: :date_range,
+                              extensions: { required: true, default: -> { Date.new(2026, 5, 1).. } }
     end
 
     ActiveAdmin.register Post, as: "BananaSanitizeBuiltinPost" do

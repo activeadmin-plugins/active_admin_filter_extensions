@@ -9,6 +9,7 @@ I18n.load_path += Dir[File.expand_path("../config/locales/*.yml", __dir__)]
 require "active_admin_filter_extensions/data_access"
 require "active_admin_filter_extensions/filter_options"
 require "active_admin_filter_extensions/search_keys"
+require "active_admin_filter_extensions/required_filters"
 require "active_admin_filter_extensions/filter_defaults"
 require "active_admin_filter_extensions/filters_form"
 require "active_admin_filter_extensions/redirect"
@@ -27,6 +28,7 @@ ActiveAdmin.before_load do |_app|
   # `controller do` block should win, which is what including gives.
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::FilterOptions
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::SearchKeys
+  ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::RequiredFilters
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::FilterDefaults
   ActiveAdmin::ResourceController.helper_method :filtering_params, :filter_default_values, :visible_filters
 

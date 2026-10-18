@@ -161,4 +161,17 @@ RSpec.describe ActiveAdminFilterExtensions::DataAccess do
     end
   end
 
+  describe "a required filter's Proc default" do
+    it "is evaluated once per request, shared with the required grouping" do
+      calls = 0
+      controller = FakeController.new(
+        filters: { status_eq: { extensions: { default: -> { calls += 1; "published" }, required: true } } }
+      )
+
+      controller.send(:filtering_params)
+
+      expect(calls).to eq(1)
+    end
+  end
+
 end

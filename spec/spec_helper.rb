@@ -8,6 +8,7 @@ require "active_admin/view_helpers/method_or_proc_helper"
 require "active_admin_filter_extensions/data_access"
 require "active_admin_filter_extensions/filter_options"
 require "active_admin_filter_extensions/search_keys"
+require "active_admin_filter_extensions/required_filters"
 require "active_admin_filter_extensions/filter_defaults"
 require "active_admin_filter_extensions/policies"
 
@@ -56,6 +57,7 @@ class FakeController
   include ActiveAdminFilterExtensions::Policies::Controller
   include ActiveAdminFilterExtensions::FilterOptions
   include ActiveAdminFilterExtensions::SearchKeys
+  include ActiveAdminFilterExtensions::RequiredFilters
   include ActiveAdminFilterExtensions::FilterDefaults
 end
 
