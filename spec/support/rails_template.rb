@@ -517,6 +517,14 @@ file "app/admin/posts.rb", <<~RUBY
                           extensions: { sanitize: :digits, validate: :integer, on_invalid: :empty }
     end
 
+    ActiveAdmin.register Post, as: "EmptyDigitsArrayPost" do
+      # A genuine multi-value filter: unlike the scalar filter above, its check boxes submit
+      # q[status_in][] and can therefore render the preserved array back to the admin.
+      filter :status, as: :check_boxes,
+                      collection: [["Not a number", "abc"], "draft", "published"],
+                      extensions: { sanitize: :digits, validate: :integer, on_invalid: :empty }
+    end
+
     ActiveAdmin.register Post, as: "RejectWindowPost" do
       # Value AND window policies on one :reject filter: the second violation must not answer
       # an already-answered request.
