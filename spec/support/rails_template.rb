@@ -394,6 +394,14 @@ file "app/admin/posts.rb", <<~RUBY
       filter :starred
     end
 
+    ActiveAdmin.register Post, as: "NilPairedPost" do
+      # A member of a with: group whose default opts out for this admin. Declared, so the group
+      # is complete; nil, so it imposes nothing - and neither does the partner.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", with: :starred_eq }
+      filter :starred, extensions: { default: -> { nil } }
+    end
+
     ActiveAdmin.register Post, as: "BananaHalfPairedPost" do
       # Half the with: group declares a default - the fallback would execute the very
       # half-group the enforcement refuses. The suite proves that raises.

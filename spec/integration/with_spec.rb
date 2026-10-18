@@ -94,6 +94,17 @@ RSpec.describe "with: filters", type: :feature do
       .to eq("title_cont" => "keep", "status_eq" => "published", "starred_eq" => "false")
   end
 
+  it "imposes nothing when a member's default resolves to nil" do
+    # A nil Proc result is how a per-admin default opts out. Read as a missing declaration it
+    # raised the half-group config error on every bare visit, per admin.
+    visit "/admin/nil_paired_posts"
+
+    expect(page).to have_no_content("must be given together")
+    expect(URI.parse(page.current_url).query).to be_nil
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
   it "raises when defaults answer only half the group" do
     # The fallback is held to the same all-or-none contract the enforcement imposes.
     expect { visit "/admin/banana_half_paired_posts" }

@@ -55,9 +55,20 @@ module ActiveAdminFilterExtensions
       with_groups.each do |keys|
         next unless keys.any? { |key| defaults.key?(key) }
 
+        # A member that opted out this request leaves the group uncompletable, and half a group
+        # is the search the all-or-none contract refuses - so the group imposes nothing.
+        next defaults = defaults.except(*keys) if keys.any? { |key| nil_default_filter_keys.include?(key) }
+
         defaults = filter_default_values.slice(*keys).merge(defaults)
       end
       defaults
+    end
+
+    # The keys of filters that declare a default: which resolved to nil for this request. A nil
+    # Proc result imposes nothing - that is how a per-admin default opts out - so it is not the
+    # missing declaration the with: completeness check refuses.
+    def nil_default_filter_keys
+      @nil_default_filter_keys ||= []
     end
 
     # The defaults of keys a policy just reset - refilled whatever filter_defaults_apply?
@@ -110,7 +121,9 @@ module ActiveAdminFilterExtensions
 
         before = result.keys
         add_filter_default_value(result, attribute, options)
-        (@filter_default_keys ||= {})[attribute] = result.keys - before
+        added = result.keys - before
+        (@filter_default_keys ||= {})[attribute] = added
+        nil_default_filter_keys.concat(policy_search_keys(attribute, options)) if added.empty?
         # Value policies first: the window must be judged on what the sanitizer stored.
         validate_default_against_value_policies(attribute, options, result, result.keys - before)
         validate_default_against_policies(attribute, options, result)
@@ -122,7 +135,7 @@ module ActiveAdminFilterExtensions
     # enforcement even runs.
     def validate_defaults_against_with_groups(defaults)
       with_groups.each do |keys|
-        answered = keys.select { |key| defaults.key?(key) }
+        answered = keys.select { |key| defaults.key?(key) || nil_default_filter_keys.include?(key) }
         next if answered.empty? || answered.size == keys.size
 
         raise ArgumentError,
