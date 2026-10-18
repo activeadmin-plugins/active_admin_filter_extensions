@@ -220,7 +220,15 @@ module ActiveAdminFilterExtensions
       def policy_search_keys(attribute, options)
         filter_search_keys(attribute, options)
       rescue ArgumentError
+        fallback_search_key_attributes << attribute
         [attribute.to_s]
+      end
+
+      # Which filters got their key from the fallback rather than from their input. A window
+      # policy reads this: one key is a configuration error when the input said so, and merely
+      # unknowable when nothing could ask the input.
+      def fallback_search_key_attributes
+        @fallback_search_key_attributes ||= []
       end
 
       def enforce_scalar_policies(q, attribute, options, keys)
@@ -306,6 +314,10 @@ module ActiveAdminFilterExtensions
         return unless options[:max_range] || options[:min]
 
         unless keys.size == 2
+          # Nothing could ask the input what it submits, so one key is not a verdict about the
+          # declaration - and raising here is the 500 the fallback exists to prevent.
+          return warn_underivable_window(attribute) if fallback_search_key_attributes.include?(attribute)
+
           raise ArgumentError,
                 "filter :#{attribute} declares max_range:/min: but its input submits "                 "#{keys.join(' and ')} - a window policy needs a two-ended input"
         end
@@ -319,6 +331,25 @@ module ActiveAdminFilterExtensions
         # The fallback's own sanity is checked once, at default materialization - in every
         # mode, not only on the resetting path.
         apply_invalid_filter_policy(attribute, options, keys, violation.first, violation.last)
+      end
+
+      # Once per resource: an index is hot, and the declaration is the same on every request.
+      def warn_underivable_window(attribute)
+        warned = self.class.instance_variable_get(:@extensions_underivable_windows) ||
+                 self.class.instance_variable_set(:@extensions_underivable_windows, [])
+        return if warned.include?(attribute)
+
+        warned << attribute
+        policy_logger&.warn(
+          "filter :#{attribute} declares max_range:/min: but its search key could not be " \
+          "derived, so the window is not enforced - name the predicates with a Hash"
+        )
+        nil
+      end
+
+      # Kept for the unit suite, which deliberately runs without Rails loaded.
+      def policy_logger
+        ::Rails.logger if defined?(::Rails)
       end
 
       def window_violation(options, from_raw, to_raw)

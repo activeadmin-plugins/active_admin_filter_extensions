@@ -193,5 +193,22 @@ RSpec.describe ActiveAdminFilterExtensions::DataAccess do
       controller.send(:enforce_filter_value_policies)
       expect(controller.params[:q]["time_start_gteq"]).to eq("2026-01-01")
     end
+
+    context "when the filter declares a window policy" do
+      # The fallback gives one key, and a window policy demands two - so the very page the
+      # fallback keeps alive raised "needs a two-ended input" on every request instead.
+      let(:filters) { { time_start_gteq: { extensions: { max_range: 86_400 } } } }
+      let(:params) { { q: { "time_start_gteq" => "2026-01-01" } } }
+
+      it "logs and skips the window instead of raising" do
+        warnings = []
+        logger = Object.new
+        logger.define_singleton_method(:warn) { |message| warnings << message }
+        controller.define_singleton_method(:policy_logger) { logger }
+
+        expect { controller.send(:enforce_filter_value_policies) }.not_to raise_error
+        expect(warnings.first).to match(/could not be derived/)
+      end
+    end
   end
 end
