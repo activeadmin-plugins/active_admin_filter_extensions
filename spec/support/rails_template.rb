@@ -154,6 +154,13 @@ file "app/admin/posts.rb", <<~RUBY
       filter :position, as: :numeric, extensions: { default: { in: -> { [] } } }
     end
 
+    ActiveAdmin.register Post, as: "NilMemberDefaultPost" do
+      # `default: -> { [current_admin_user.team_id] }` for an admin with no team: an Array whose
+      # only member is blank survives a plain blank-reject but cannot round-trip through a URL.
+      filter :status, as: :check_boxes, collection: %w[draft published],
+                      extensions: { default: -> { [nil] } }
+    end
+
     ActiveAdmin.register Post, as: "BananaBlankDefaultPost" do
       # A blank default is a value ?q[k]= cannot round-trip (the blank is stripped on the way
       # back in) - it must stay out of the redirect, not loop it.
