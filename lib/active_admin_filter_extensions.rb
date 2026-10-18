@@ -2,12 +2,17 @@
 
 require "activeadmin"
 require "active_admin_filter_extensions/version"
+
+# The violation messages live in plain i18n - config/locales/en.yml here, overridable by the
+# application's own locale files under the same keys.
+I18n.load_path += Dir[File.expand_path("../config/locales/*.yml", __dir__)]
 require "active_admin_filter_extensions/data_access"
 require "active_admin_filter_extensions/filter_options"
 require "active_admin_filter_extensions/search_keys"
 require "active_admin_filter_extensions/filter_defaults"
 require "active_admin_filter_extensions/filters_form"
 require "active_admin_filter_extensions/redirect"
+require "active_admin_filter_extensions/policies"
 require "active_admin_filter_extensions/notice"
 
 module ActiveAdminFilterExtensions
@@ -28,6 +33,9 @@ ActiveAdmin.before_load do |_app|
   ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtension
   ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Notice
   ActiveAdmin::Resource.include ActiveAdminFilterExtensions::NoticeResource
+  # Policies before the redirect: a sanitized or reset value must be what the redirect
+  # decision - and therefore the URL - is computed from.
+  ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Policies::Controller
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Redirect
   ActiveAdmin::Filters::ViewHelper.prepend ActiveAdminFilterExtensions::ViewHelper
   ActiveAdmin::Filters::ActiveSidebar.prepend ActiveAdminFilterExtensions::ActiveSidebar

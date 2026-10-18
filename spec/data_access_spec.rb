@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "active_admin_filter_extensions/policies"
 
 RSpec.describe ActiveAdminFilterExtensions::DataAccess do
   subject(:searched_with) do

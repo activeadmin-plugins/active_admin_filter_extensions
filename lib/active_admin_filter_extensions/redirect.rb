@@ -52,7 +52,7 @@ module ActiveAdminFilterExtensions
         # This request is the one a declared notice belongs on, and it is about to answer 302,
         # so the message is written to the travelling flash.
         if (message = active_admin_config.default_filters_notice) &&
-           filter_defaults_engaged?
+           filter_policy_errors.empty? && filter_defaults_engaged?
           # On a shared key - the default is :notice, the same key a batch action writes - the
           # arriving message wins: it names what just happened, the notice can wait.
           key = active_admin_config.default_filters_notice_flash_key

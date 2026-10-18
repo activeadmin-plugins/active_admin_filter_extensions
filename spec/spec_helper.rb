@@ -9,6 +9,7 @@ require "active_admin_filter_extensions/data_access"
 require "active_admin_filter_extensions/filter_options"
 require "active_admin_filter_extensions/search_keys"
 require "active_admin_filter_extensions/filter_defaults"
+require "active_admin_filter_extensions/policies"
 
 # `DataAccess` only needs `params`, `active_admin_config` and something that answers `ransack`.
 # That lets the unit suite run without booting Active Admin or Rails; the integration suite in
@@ -27,7 +28,13 @@ class FakeChain
 end
 
 class FakeController
-  Config = Struct.new(:filters)
+  # The resource settings the policy layer reads unconditionally in a real install.
+  Config = Struct.new(:filters) do
+    def require_any_filter_notice = nil
+  end
+
+  def self.before_action(*); end # the guard registers one; FakeController has no chain
+  def performed? = false
 
   attr_reader :params, :active_admin_config
 
@@ -46,6 +53,7 @@ class FakeController
   end
 
   prepend ActiveAdminFilterExtensions::DataAccess
+  include ActiveAdminFilterExtensions::Policies::Controller
   include ActiveAdminFilterExtensions::FilterOptions
   include ActiveAdminFilterExtensions::SearchKeys
   include ActiveAdminFilterExtensions::FilterDefaults

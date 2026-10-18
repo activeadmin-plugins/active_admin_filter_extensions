@@ -23,6 +23,9 @@ module ActiveAdminFilterExtensions
         # themselves - but must speak when a required: filter just imposed its window on a
         # partly-filtered request.
         next unless filter_defaults_engaged?
+        # A policy just rejected a value: the error already explains why the page shows the
+        # default slice - the notice on top of it would be noise.
+        next if filter_policy_errors.present?
 
         flash.now[flash_key] = ::MethodOrProcHelper.render_in_context(self, message)
       end

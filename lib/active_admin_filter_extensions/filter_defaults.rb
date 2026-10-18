@@ -26,12 +26,20 @@ module ActiveAdminFilterExtensions
     # @return [Hash, ActionController::Parameters] values passed to Ransack
     def filtering_params
       requested = requested_filtering_params
-      return requested || {} unless filter_defaults_apply?
+      defaults = filter_defaults_apply? ? filter_default_values : {}
 
-      defaults = filter_default_values
+      defaults = defaults.merge(reset_filter_default_values)
       return requested || {} if defaults.blank?
 
       defaults.merge(requested || {})
+    end
+
+    # The defaults of keys a policy just reset - refilled whatever filter_defaults_apply?
+    # says, because the reset itself is what emptied them.
+    def reset_filter_default_values
+      return {} if filter_policy_reset_keys.empty?
+
+      filter_default_values.slice(*filter_policy_reset_keys)
     end
 
     # Whether any default actually reaches this request's search - what the notice announces.
@@ -65,7 +73,46 @@ module ActiveAdminFilterExtensions
       @filter_default_values ||= visible_filters.each_with_object({}) do |(attribute, options), result|
         next unless options.key?(:default)
 
+        before = result.keys
         add_filter_default_value(result, attribute, options)
+        validate_default_against_value_policies(attribute, options, result, result.keys - before)
+      end
+    end
+
+    # A default the filter's own validate: would refuse is the same configuration error: it
+    # refills on every bare visit, fails, resets, and refills - a permanent self-inflicted
+    # error banner. Judged - and stored - the way the URL will say it: sanitized, as a
+    # String, because that is the value every next request actually carries.
+    def validate_default_against_value_policies(attribute, options, result, keys)
+      sanitizer = options[:sanitize]
+      validator = options[:validate]
+      return unless sanitizer || validator
+
+      keys.each do |key|
+        value = result[key]
+        next if value.nil?
+
+        # Scalar values go through as the String the URL will say - a -20 under :digits must
+        # search as "20" on every format. Multi-valued defaults are not scalar submissions.
+        if sanitizer && !value.is_a?(Enumerable)
+          sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.to_s.dup).to_s
+          # The same fixpoint check submitted values face: without it the CSV searches the
+          # once-sanitized value while the HTML converges on another, and nobody raises.
+          if ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
+            raise ArgumentError,
+                  "filter :#{attribute}'s sanitize: is not idempotent " \
+                  "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
+                  "a default must sanitize to a fixpoint"
+          end
+
+          result[key] = sanitized
+        end
+        next unless validator
+        next unless ::MethodOrProcHelper.render_in_context(self, validator, result[key].to_s)
+
+        raise ArgumentError,
+              "filter :#{attribute} declares a default that violates its own validate: " \
+              "policy - the fallback must be a value the filter accepts"
       end
     end
 

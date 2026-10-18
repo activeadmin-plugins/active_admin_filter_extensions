@@ -168,6 +168,58 @@ file "app/admin/posts.rb", <<~RUBY
       end
     end
 
+    ActiveAdmin.register Post, as: "GuardedPost" do
+      default_filters_notice "Showing kept posts by default"
+
+      # A value policy next to the default: strip what typing drags in, refuse what the
+      # search cannot mean, and say so - the home-grown before_action guards, as options.
+      filter :title_cont, as: :string,
+                          extensions: { default: "keep",
+                                    sanitize: ->(value) { value.delete("-") },
+                                    validate: ->(value) { value.match?(/\\d/) && "Title filter must not contain digits." } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaValidatedDefaultPost" do
+      # Its default violates its own validate: - the suite proves that raises instead of
+      # flashing itself on every bare visit, forever.
+      filter :title_cont, as: :string,
+                          extensions: { default: "v1",
+                                    validate: ->(value) { value.match?(/\\d/) && "no digits" } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaSanitizePost" do
+      # Its sanitizer grows the value on every pass - the suite proves that raises instead of
+      # redirect-looping forever.
+      filter :title_cont, as: :string, extensions: { sanitize: ->(value) { "%\#{value}%" } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaShrinkingDefaultPost" do
+      # Its sanitizer trims one hyphen per pass - the default must face the same fixpoint
+      # check submitted values do, or the formats search different values without a word.
+      filter :title_cont, as: :string,
+                          extensions: { default: "--keep",
+                                        sanitize: ->(value) { value.sub(/\\A-/, "") } }
+    end
+
+    ActiveAdmin.register Post, as: "FrozenDefaultPost" do
+      # A frozen default through an in-place sanitizer: the config's string is not the
+      # sanitizer's to mutate - FrozenError on the first visit, or a quietly corrupted config.
+      filter :title_cont, as: :string,
+                          extensions: { default: "ke-ep".freeze,
+                                        sanitize: ->(value) { value.delete!("-") || value } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaMutatingSanitizePost" do
+      # Its sanitizer rewrites the value IN PLACE and returns it - compared against itself,
+      # the no-fixpoint guard would wave the loop through.
+      filter :title_cont, as: :string, extensions: { sanitize: ->(value) { value << "%" } }
+    end
+
+    ActiveAdmin.register Post, as: "EmptyHashDefaultPost" do
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: { in: -> { {} } } }
+    end
+
     ActiveAdmin.register Post, as: "NoDefaultsPost" do
       filter :title
     end
