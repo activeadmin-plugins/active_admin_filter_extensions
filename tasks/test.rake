@@ -17,6 +17,11 @@ task :setup do
   ].join(" ")
 
   app_dir = "spec/rails/rails-#{Rails::VERSION::STRING}"
+  # From scratch, always: `rails new` git-inits the app, so a nested repo survives
+  # `git clean -fdx` and the generator would then write into the surviving tree - leaving a
+  # stale resource behind a freshly stamped digest, which is a green the stamp exists to deny.
+  require "fileutils"
+  FileUtils.rm_rf(app_dir)
   sh "bundle exec rails new #{app_dir} #{args}"
 
   # Stamped so rails_helper can refuse an app generated from an older template instead of
