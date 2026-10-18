@@ -49,10 +49,10 @@ end
 ## Install
 
 ```ruby
-gem "active_admin_filter_extensions", github: "activeadmin-plugins/active_admin_filter_extensions"
+gem "active_admin_filter_extensions", "~> 1.0"
 ```
 
-Not on RubyGems yet; pin the tag.
+The gem is published on RubyGems.
 
 ## The extensions: container
 
