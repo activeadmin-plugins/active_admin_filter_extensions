@@ -264,6 +264,12 @@ file "app/admin/posts.rb", <<~RUBY
                                             default: -> { Date.new(2026, 5, 1)..Date.new(2026, 6, 30) } }
     end
 
+    ActiveAdmin.register Post, as: "NilFloorPost" do
+      # A per-admin retention floor that opts out for this admin - nil imposes nothing, the way
+      # a nil default: does.
+      filter :published_date, as: :date_range, extensions: { min: -> { nil } }
+    end
+
     ActiveAdmin.register Post, as: "ValidatedWindowPost" do
       # Value AND window policies with a default: a scalar reset must not leave half the
       # admin's window to be completed from the default pair unchecked.

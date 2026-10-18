@@ -63,6 +63,16 @@ RSpec.describe "Window policies: max_range and min", type: :feature do
       .to eq("published_date_gteq" => "2026-05-01", "published_date_lteq" => "2026-06-30")
   end
 
+  it "imposes nothing when a min: Proc resolves to nil" do
+    # An upper bound alone: both floor lookups are on this path, and nil.in_time_zone 500'd
+    # the request the floor was only meant to narrow.
+    visit "/admin/nil_floor_posts?q%5Bpublished_date_lteq%5D=2026-06-30"
+
+    expect(page).to have_no_content("cannot start before")
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
   it "resets the whole pair when a value policy rejects one bound" do
     # Half the admin's window completed from the default pair is a window nobody asked for
     # and nothing validated - the CSV would execute it without the HTML's healing hop.

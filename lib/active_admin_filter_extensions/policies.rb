@@ -359,13 +359,10 @@ module ActiveAdminFilterExtensions
         return [:range_invalid, {}] if (from_raw.present? && from.nil?) || (to_raw.present? && to.nil?)
         return [:range_invalid, {}] if from && to && from > to
 
-        if (floor = options[:min])
-          # in_time_zone, not to_time: the bounds are parsed in Time.zone, and Date#to_time
-          # speaks the SERVER zone - apart, a floor-equal bound is off by the offset.
-          floor = ::MethodOrProcHelper.render_in_context(self, floor).in_time_zone
-          if [from, to].compact.any? { |bound| bound < floor }
-            return [:before_floor, { floor: floor.to_date }]
-          end
+        floor = window_floor(options)
+
+        if floor && [from, to].compact.any? { |bound| bound < floor }
+          return [:before_floor, { floor: floor.to_date }]
         end
 
         if (max = options[:max_range])
@@ -385,12 +382,20 @@ module ActiveAdminFilterExtensions
         # A min: standing alone still refuses a window with no lower bound - everything
         # before the floor is the query the floor exists to refuse. After max_range:, whose
         # too-wide verdict is the more actionable one when both are declared.
-        if from.nil? && to && (floor = options[:min])
-          floor = ::MethodOrProcHelper.render_in_context(self, floor).in_time_zone
-          return [:before_floor, { floor: floor.to_date }]
-        end
+        return [:before_floor, { floor: floor.to_date }] if from.nil? && to && floor
 
         nil
+      end
+
+      # `min:` resolved for this request, once. nil imposes nothing - that is how a per-admin
+      # floor opts out, the way a nil default: does.
+      def window_floor(options)
+        floor = options[:min]
+        return nil unless floor
+
+        # in_time_zone, not to_time: the bounds are parsed in Time.zone, and Date#to_time speaks
+        # the SERVER zone - apart, a floor-equal bound is off by the offset.
+        ::MethodOrProcHelper.render_in_context(self, floor)&.in_time_zone
       end
 
       def parse_window_bound(raw)
