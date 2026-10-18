@@ -141,7 +141,8 @@ module ActiveAdminFilterExtensions
         # slate, Create link and all; a present-but-empty q renders an empty result instead.
         params[:q] ||= {}
         flash.now[:warning] =
-          notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions)
+          notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions,
+                                                 default: :require_any_filter)
       end
 
       # Ransack silently ignores a condition nobody declared - junk, a stale bookmark after
@@ -462,15 +463,31 @@ module ActiveAdminFilterExtensions
 
       def filter_policy_message(attribute, options, message, interpolations = {})
         return message if message.is_a?(String)
-        # `message:` on the filter speaks for every symbolic violation of this filter - the
-        # app's own words without duplicating a whole validator to say them.
-        return options[:message] if options[:message]
 
         values = { filter: options[:label] || attribute.to_s.humanize }.merge(interpolations)
+        # `message:` on the filter speaks for every symbolic violation of this filter - the
+        # app's own words without duplicating a whole validator to say them. Interpolated, so
+        # those words can name %{limit} and %{floor} as the shipped texts do.
+        if (override = options[:message])
+          return begin
+            I18n.interpolate(override, values)
+          rescue I18n::ArgumentError
+            override
+          end
+        end
+
         # The English texts ship as plain i18n (config/locales/en.yml); an application
-        # overrides them under the same keys. Unknown symbols read as :invalid.
-        I18n.t(message, scope: :active_admin_filter_extensions,
-                        default: :invalid, **values)
+        # overrides them under the same keys.
+        policy_translation(message, values)
+      end
+
+      # A validate: may answer any Symbol in the gem's scope, including the parameterized ones -
+      # which have nothing to interpolate from. A violation message is not worth a 500, so an
+      # unknown key and a missing interpolation both read as :invalid.
+      def policy_translation(message, values)
+        I18n.t(message, scope: :active_admin_filter_extensions, raise: true, **values)
+      rescue I18n::ArgumentError
+        I18n.t(:invalid, scope: :active_admin_filter_extensions, **values)
       end
     end
   end

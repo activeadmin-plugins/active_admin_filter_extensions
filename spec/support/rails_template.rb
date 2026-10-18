@@ -493,6 +493,27 @@ file "app/admin/posts.rb", <<~RUBY
                           extensions: { validate: ->(value) { value.match?(/\\d/) && :bogus_key } }
     end
 
+    ActiveAdmin.register Post, as: "ParameterizedSymbolPost" do
+      # A validate: answering one of the gem's own parameterized symbols - which the docs
+      # invite - with nothing to interpolate %{limit} from.
+      filter :title_cont, as: :string,
+                          extensions: { validate: ->(value) { value.match?(/\\d/) && :range_too_wide } }
+    end
+
+    ActiveAdmin.register Post, as: "InterpolatedMessagePost" do
+      # message: in the app's own words, naming the gem's own interpolation.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 90.days,
+                                            message: "Pick at most %{limit} days." }
+    end
+
+    ActiveAdmin.register Post, as: "BananaNoticeKeyPost" do
+      # require_any_filter named with a Symbol no locale defines.
+      require_any_filter notice: :no_such_notice_key
+
+      filter :title_cont, as: :string
+    end
+
     ActiveAdmin.register Post, as: "NoDefaultsPost" do
       filter :title
     end

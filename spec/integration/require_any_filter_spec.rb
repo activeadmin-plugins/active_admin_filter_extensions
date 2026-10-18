@@ -86,6 +86,13 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_content("keep me")
   end
 
+  it "falls back to the shipped text for a notice key no locale defines" do
+    visit "/admin/banana_notice_key_posts"
+
+    expect(page).to have_content("You must specify at least one filter")
+    expect(page).to have_no_content("translation missing")
+  end
+
   it "notices when a policy just reset the only question" do
     # The validator empties q; without re-checking afterwards the whole table renders with no
     # warning - the unfiltered dump the guard was declared to forbid.

@@ -139,6 +139,24 @@ RSpec.describe "Filter value policies", type: :feature do
       expect(page).to have_no_content("translation missing")
     end
 
+    it "interpolates the override" do
+      # Used verbatim, the app's own words could never name %{limit} or %{floor}.
+      visit "/admin/interpolated_message_posts?q%5Bpublished_date_gteq%5D=2020-01-01" \
+            "&q%5Bpublished_date_lteq%5D=2026-01-01"
+
+      expect(page).to have_content("Pick at most 90 days.")
+    end
+
+    it "falls back to the generic text for a parameterized symbol it cannot interpolate" do
+      # The docs invite a validate: that returns a gem scope symbol; the parameterized ones
+      # have nothing to interpolate from, and raising there 500s the request the policy is
+      # meant to answer.
+      visit "/admin/parameterized_symbol_posts?q%5Btitle_cont%5D=keep123"
+
+      expect(page).to have_content("Title cont filter has an invalid value.")
+      expect(page).to have_no_content("translation missing")
+    end
+
     it "stays quiet for a valid value" do
       visit "/admin/ip_guarded_posts?q%5Btitle_cont%5D=10.0.0.0%2F8"
 
