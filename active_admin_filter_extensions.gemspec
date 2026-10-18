@@ -9,9 +9,11 @@ Gem::Specification.new do |s|
   s.email       = ["fedoronchuk@gmail.com"]
   s.homepage    = "https://github.com/activeadmin-plugins/active_admin_filter_extensions"
   s.license     = "MIT"
-  s.summary     = "Default values for Active Admin index filters"
-  s.description = "Lets an Active Admin resource declare what its index filters on when opened " \
-                  "without filters of its own: filter :state_eq, extensions: { default: 'active' }"
+  s.summary     = "Defaults and value policies for Active Admin index filters"
+  s.description = "Lets an Active Admin resource declare its index filter defaults and the " \
+                  "policies that guard them - required windows, range caps, sanitizers and " \
+                  "validators - and a :redirect mode that spells the effective filters into " \
+                  "the URL."
 
   s.required_ruby_version = ">= 3.3"
   s.add_dependency "activeadmin", ">= 3.5", "< 4"
