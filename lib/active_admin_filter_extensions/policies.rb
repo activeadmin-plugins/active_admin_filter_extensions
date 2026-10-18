@@ -137,6 +137,9 @@ module ActiveAdminFilterExtensions
         return if notice.nil? || any_declared_filter_answered?
 
         @filter_policy_render_empty = true
+        # Active Admin reads a q-less index as "this table has no rows" and renders the blank
+        # slate, Create link and all; a present-but-empty q renders an empty result instead.
+        params[:q] ||= {}
         flash.now[:warning] =
           notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions)
       end

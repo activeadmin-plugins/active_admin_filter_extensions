@@ -21,6 +21,16 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_content("drop me")
   end
 
+  it "renders an empty result, not Active Admin's blank slate" do
+    # The guard blanks the collection; with no `q` in the request Active Admin reads that as
+    # "this table has no rows at all" and offers a Create link beside the warning.
+    visit "/admin/picky_posts"
+
+    expect(page).to have_content("No Picky Posts found")
+    expect(page).to have_no_content("There are no Picky Posts yet")
+    expect(page).to have_no_link("Create one")
+  end
+
   it "answers once asked" do
     visit "/admin/picky_posts?q%5Btitle_cont%5D=keep"
 
