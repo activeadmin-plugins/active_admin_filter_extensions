@@ -274,7 +274,13 @@ module ActiveAdminFilterExtensions
             next unless (validator = options[:validate])
 
             validator = Validators.resolve(validator)
-            message = Array(value).lazy.filter_map { |element| ::MethodOrProcHelper.render_in_context(self, validator, element) }.first
+            # Blank ELEMENTS are the ones #requested_filtering_params discards before searching -
+            # ?q[k][]=&q[k][]=draft is the shape a multi-select submits - so judging one refuses
+            # a value nothing searches and resets a legitimate selection. A blank scalar is a
+            # different thing and still judged: the sanitizer may have just emptied it.
+            elements = value.is_a?(Array) ? value.reject(&:blank?) : [value]
+            message = elements.lazy
+                              .filter_map { |element| ::MethodOrProcHelper.render_in_context(self, validator, element) }.first
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.
             next unless message
 

@@ -110,6 +110,17 @@ RSpec.describe "Filter value policies", type: :feature do
       expect(page).to have_no_content("drop me")
     end
 
+    it "ignores a blank element beside a real selection" do
+      # ?q[status_in][]=&q[status_in][]=draft is the shape a multi-select submits, and
+      # normalization drops the blank before searching - judged, it flashed an error about a
+      # value nothing searches and reset a legitimate selection to the default.
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5B%5D=&q%5Bstatus_in%5D%5B%5D=draft"
+
+      expect(page).to have_no_content("Letters only.")
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("keep me")
+    end
+
     it "still refuses a Hash-wrapped value on the same filter" do
       visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5Bvalue%5D=draft"
 
