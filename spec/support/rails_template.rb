@@ -279,6 +279,16 @@ file "app/admin/posts.rb", <<~RUBY
                                             default: -> { Date.new(2026, 5, 1)..Date.new(2026, 6, 30) } }
     end
 
+    ActiveAdmin.register Post, as: "ShortWindowPost" do
+      # A cap shorter than a day - reported in whole days it read "0 days".
+      filter :published_date, as: :date_range, extensions: { max_range: 6.hours }
+    end
+
+    ActiveAdmin.register Post, as: "StringKeyedExtensionsPost" do
+      # A string-keyed container: accepted by the unknown-key check and then silently inert.
+      filter :title_cont, as: :string, extensions: { "default" => "keep" }
+    end
+
     ActiveAdmin.register Post, as: "NilFloorPost" do
       # A per-admin retention floor that opts out for this admin - nil imposes nothing, the way
       # a nil default: does.
@@ -530,7 +540,7 @@ file "app/admin/posts.rb", <<~RUBY
       # message: in the app's own words, naming the gem's own interpolation.
       filter :published_date, as: :date_range,
                               extensions: { max_range: 90.days,
-                                            message: "Pick at most %{limit} days." }
+                                            message: "Pick at most %{limit}." }
     end
 
     ActiveAdmin.register Post, as: "BananaNoticeKeyPost" do

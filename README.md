@@ -286,7 +286,8 @@ refills. An open upper bound is measured against now; a FUTURE lower bound with 
 bound selects a not-yet-written window and passes. A default that would itself violate the
 policy raises on first use - resetting into a refused window is a loop, not a fallback.
 Messages are i18n keys under `active_admin_filter_extensions.*` (`range_invalid`,
-`range_too_wide` with `%{limit}`, `before_floor` with `%{floor}`), shipped with English
+`range_too_wide` with `%{limit}` (the cap in the units it was declared in, "90 days" or
+"6 hours"), `before_floor` with `%{floor}`), shipped with English
 defaults.
 
 ## Value policies: sanitize and validate

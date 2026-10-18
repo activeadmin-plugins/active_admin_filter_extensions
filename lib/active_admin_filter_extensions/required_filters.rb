@@ -49,8 +49,8 @@ module ActiveAdminFilterExtensions
     def required_filter_defaults_absent_from(requested)
       required_filter_default_values.each_with_object({}) do |(_attribute, entry), result|
         next if required_group_answered?(requested, entry[:keys])
-        next if entry[:if].any? && entry[:if].none? { |key| requested[key].present? }
-        next if entry[:unless].any? { |key| requested[key].present? }
+        next if entry[:if].any? && entry[:if].none? { |key| answered_value?(requested[key]) }
+        next if entry[:unless].any? { |key| answered_value?(requested[key]) }
 
         result.merge!(entry[:defaults])
       end
@@ -66,13 +66,18 @@ module ActiveAdminFilterExtensions
       bases = keys.map { |key| strip_ransack_predicate(key) }
 
       requested.any? do |key, value|
-        next false unless value.present?
+        next false unless answered_value?(value)
 
         key = key.to_s
         next true if keys.include?(key)
 
         key != strip_ransack_predicate(key) && bases.include?(strip_ransack_predicate(key))
       end
+    end
+
+    # `false` is a value, not a blank - the rule the normalized request already follows.
+    def answered_value?(value)
+      value.present? || value == false
     end
   end
 end

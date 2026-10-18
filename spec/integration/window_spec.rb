@@ -63,6 +63,15 @@ RSpec.describe "Window policies: max_range and min", type: :feature do
       .to eq("published_date_gteq" => "2026-05-01", "published_date_lteq" => "2026-06-30")
   end
 
+  it "names a sub-day cap in the units it was declared in" do
+    # Divided into whole days, a cap shorter than one read "a maximum date range of 0 days".
+    visit "/admin/short_window_posts?q%5Bpublished_date_gteq%5D=2026-01-01" \
+          "&q%5Bpublished_date_lteq%5D=2026-06-30"
+
+    expect(page).to have_content("maximum date range of 6 hours")
+    expect(page).to have_no_content("of 0 days")
+  end
+
   it "imposes nothing when a min: Proc resolves to nil" do
     # An upper bound alone: both floor lookups are on this path, and nil.in_time_zone 500'd
     # the request the floor was only meant to narrow.

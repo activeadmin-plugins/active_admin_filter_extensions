@@ -52,7 +52,9 @@ module ActiveAdminFilterExtensions
         raise ArgumentError, "filter :#{attribute}: #{stray.map(&:inspect).join(', ')} "                              "belong inside extensions: { ... }"
       end
 
-      extensions = options[:extensions] || {}
+      # Symbolized, because the unknown-key check below symbolizes too: a string-keyed container
+      # otherwise passed it and then merged under a key the gem never reads.
+      extensions = (options[:extensions] || {}).transform_keys(&:to_sym)
       unknown = extensions.keys.map(&:to_sym) - EXTENSION_KEYS
       if unknown.any?
         raise ArgumentError, "filter :#{attribute}: unknown extensions: #{unknown.map(&:inspect).join(', ')} - "                              "the gem ships #{EXTENSION_KEYS.map(&:inspect).join(', ')}"

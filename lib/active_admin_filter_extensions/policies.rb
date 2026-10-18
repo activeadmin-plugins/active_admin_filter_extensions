@@ -381,14 +381,14 @@ module ActiveAdminFilterExtensions
         if (max = options[:max_range])
           # An upper bound alone is an infinitely wide window - the outage query the cap
           # exists to refuse.
-          return [:range_too_wide, { limit: (max / 1.day).to_i }] if from.nil? && to
+          return [:range_too_wide, { limit: window_limit_text(max) }] if from.nil? && to
 
           if from
             # An open upper bound is measured against now; a FUTURE lower bound with no upper
             # bound selects a not-yet-written window and passes - measuring it against now
             # would read it as inverted.
             return nil if to.nil? && from >= Time.current
-            return [:range_too_wide, { limit: (max / 1.day).to_i }] if (to || Time.current) - from > max
+            return [:range_too_wide, { limit: window_limit_text(max) }] if (to || Time.current) - from > max
           end
         end
 
@@ -398,6 +398,12 @@ module ActiveAdminFilterExtensions
         return [:before_floor, { floor: floor.to_date }] if from.nil? && to && floor
 
         nil
+      end
+
+      # The cap in the units it was declared in: divided into whole days, every cap shorter than
+      # one reported itself as "0 days".
+      def window_limit_text(max)
+        max.is_a?(::ActiveSupport::Duration) ? max.inspect : "#{max.to_i / 1.day} days"
       end
 
       # `min:` resolved for this request, once. nil imposes nothing - that is how a per-admin
