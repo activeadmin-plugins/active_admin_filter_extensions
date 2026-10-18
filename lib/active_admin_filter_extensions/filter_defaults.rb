@@ -65,7 +65,10 @@ module ActiveAdminFilterExtensions
     def reset_filter_default_values
       return {} if filter_policy_reset_keys.empty?
 
-      filter_default_values.slice(*filter_policy_reset_keys)
+      # By attribute, not by exact key: a sibling-predicate reset (position_gt) must still
+      # refill the filter's own declared default (position_eq).
+      bases = filter_policy_reset_keys.map { |key| strip_ransack_predicate(key) }
+      filter_default_values.select { |key, _| bases.include?(strip_ransack_predicate(key)) }
     end
 
     # Whether any default actually reaches this request's search - what the notice announces.

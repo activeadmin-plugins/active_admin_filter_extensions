@@ -122,7 +122,7 @@ module ActiveAdminFilterExtensions
           next unless options.values_at(:sanitize, :validate, :max_range, :min).any?
 
           keys = filter_search_keys(attribute, options)
-          enforce_scalar_policies(q, attribute, options, keys)
+          enforce_scalar_policies(q, attribute, options, keys | sibling_predicate_keys(q, keys))
           enforce_window_policies(q, attribute, options, keys)
         end
 
@@ -192,6 +192,14 @@ module ActiveAdminFilterExtensions
           overlapping, rest = merged.partition { |group| (group & keys).any? }
           merged.replace(rest << (overlapping.flatten + keys).uniq.sort)
         end
+      end
+
+      # The filter's own predicate dropdown submits _gt/_lt/_not_eq and friends beside the
+      # derived head key; a value policy guarding only the head leaves the same column one
+      # dropdown click from unpoliced. Siblings = request keys naming the same attribute.
+      def sibling_predicate_keys(q, keys)
+        bases = keys.map { |key| strip_ransack_predicate(key) }
+        q.keys.select { |key| bases.include?(strip_ransack_predicate(key)) }
       end
 
       def strip_ransack_predicate(name)

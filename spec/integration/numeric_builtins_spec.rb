@@ -58,6 +58,35 @@ RSpec.describe "built-in numeric policies", type: :feature do
     end
   end
 
+  describe "sibling predicates" do
+    # The filter's own predicate dropdown submits _gt/_lt/_not_eq and friends; a policy
+    # guarding only the head key leaves the same column one dropdown click from unpoliced.
+    it "polices a sibling predicate the dropdown submits" do
+      visit "/admin/integer_posts?q%5Bposition_gt%5D=2147483648"
+
+      expect(page).to have_content("has an invalid value")
+      expect(URI.parse(page.current_url).query).to be_nil
+    end
+
+    it "refills the owning filter's default after a sibling reset" do
+      # The reset deletes the sibling key; the refill promise belongs to the FILTER - its
+      # declared default comes back even though the submitted key never carried one.
+      visit "/admin/guarded_posts?q%5Btitle_eq%5D=keep123&commit=Filter"
+
+      expect(query_of(page.current_url)["q"]).to eq("title_cont" => "keep")
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
+    it "sanitizes a sibling predicate too" do
+      visit "/admin/integer_posts?q%5Bposition_lt%5D=2%200a"
+
+      expect(query_of(page.current_url)["q"]).to eq("position_lt" => "20")
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("keep me")
+    end
+  end
+
   describe "sanitize: :digits" do
     it "strips the value to its digits and searches that" do
       visit "/admin/integer_posts?q%5Bposition_eq%5D=%202-0a"
