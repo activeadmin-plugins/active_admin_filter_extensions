@@ -112,7 +112,7 @@ module ActiveAdminFilterExtensions
 
       def enforce_filter_value_policies
         q = params[:q]
-        return if q.blank? || !q.respond_to?(:each_pair)
+        return enforce_require_any_filter if q.blank? || !q.respond_to?(:each_pair)
 
         visible_filters.each do |attribute, options|
           # A :reject already answered this request with a redirect; a second violation must
@@ -127,6 +127,35 @@ module ActiveAdminFilterExtensions
         end
 
         enforce_with_groups(q) unless performed?
+        # Last, not first: a policy may just have reset the only question the request asked,
+        # and the guard must notice within THIS request - CSV gets no second hop.
+        enforce_require_any_filter unless performed?
+      end
+
+      def enforce_require_any_filter
+        notice = active_admin_config.require_any_filter_notice
+        return if notice.nil? || any_declared_filter_answered?
+
+        @filter_policy_render_empty = true
+        flash.now[:warning] =
+          notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions)
+      end
+
+      # Ransack silently ignores a condition nobody declared - junk, a stale bookmark after
+      # a filter rename, a predicate-less stem - and ignored is not asked. A key counts only
+      # when a declared filter submits it as-is (scope-named filters carry no predicate), or
+      # when it carries a real predicate on a declared filter's attribute.
+      def any_declared_filter_answered?
+        exact = visible_filters.flat_map { |attribute, options| filter_search_keys(attribute, options) }
+        bases = exact.map { |key| strip_ransack_predicate(key) }
+
+        filtering_params.any? do |key, value|
+          next false unless value.present? || value == false
+
+          key = key.to_s
+          exact.include?(key) ||
+            (key != strip_ransack_predicate(key) && bases.include?(strip_ransack_predicate(key)))
+        end
       end
 
       def enforce_with_groups(q)

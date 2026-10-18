@@ -7,3 +7,4 @@ en:
     range_too_wide: "%{filter} filter allows a maximum date range of %{limit} days."
     before_floor: "%{filter} filter cannot start before %{floor}."
     given_together: "%{filters} filters must be given together."
+    require_any_filter: "You must specify at least one filter"

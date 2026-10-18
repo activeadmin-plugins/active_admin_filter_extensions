@@ -374,6 +374,15 @@ file "app/admin/posts.rb", <<~RUBY
       filter :position
     end
 
+    ActiveAdmin.register Post, as: "PickyPost" do
+      # The active-calls shape: this index answers no question at all until it is asked one.
+      require_any_filter notice: "You must specify at least one filter"
+
+      filter :title_cont, as: :string,
+                          extensions: { validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
+      filter :status, as: :select, collection: %w[draft published]
+    end
+
     ActiveAdmin.register Post, as: "EmptyDigitsPost" do
       # :empty behind a sanitizer that can empty the value: the verdict must survive the
       # canonicalizing redirect, or the next request renders the whole table.
