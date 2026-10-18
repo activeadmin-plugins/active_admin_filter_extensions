@@ -39,4 +39,4 @@ jobs:
       # The Clear Filters example drives a real browser through cuprite; ubuntu-latest ships
       # Chrome, so there is nothing to install.
       - name: Run tests
-        run: bundle exec rspec
+        run: bundle exec rake spec

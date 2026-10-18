@@ -14,7 +14,21 @@ require "rails"
 ENV["RAILS"] = Rails.version
 ENV["RAILS_ROOT"] = File.expand_path("rails/rails-#{ENV['RAILS']}", __dir__)
 
-system "rake setup" unless File.exist?(ENV["RAILS_ROOT"])
+unless File.exist?(ENV["RAILS_ROOT"])
+  # A generation that dies midway leaves a partial app the File.exist? guard would then skip
+  # forever - fail the run instead of limping into it.
+  system("rake setup") ||
+    abort("rake setup failed - remove #{ENV['RAILS_ROOT']} before retrying")
+end
+
+# An app generated from an older template would silently pass against resources the template
+# no longer declares - refuse it instead.
+require "digest"
+template_digest = Digest::SHA256.file(File.expand_path("support/rails_template.rb", __dir__)).hexdigest
+stamp = File.join(ENV["RAILS_ROOT"], ".rails_template_digest")
+unless File.exist?(stamp) && File.read(stamp).strip == template_digest
+  abort "#{ENV['RAILS_ROOT']} was generated from an older rails_template.rb - "         "remove it (git clean -fdx spec/rails) and rerun, rake setup regenerates it"
+end
 
 require "active_model"
 # Required before Active Admin so that Ransack loads correctly.
