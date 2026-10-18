@@ -50,6 +50,16 @@ RSpec.describe "on_invalid policies", type: :feature do
       page.driver.header("Referer", nil)
     end
 
+    it "degrades to :reset off the HTML path" do
+      # A CSV index is answered in one request everywhere else in the gem, a flash it cannot
+      # render would be lost, and url_for drops the format - so the export is bounded the
+      # :reset way instead of being bounced into an HTML page.
+      visit "/admin/reject_posts.csv?q%5Bposition_eq%5D=abc"
+
+      expect(page.response_headers["Content-Type"]).to include("text/csv")
+      expect(page.body).to include("keep me")
+    end
+
     it "bounces once when value and window policies are violated together" do
       visit "/admin/reject_window_posts?q%5Bpublished_date_gteq%5D=2020-01-01X&q%5Bpublished_date_lteq%5D=2026-01-01X"
 

@@ -414,10 +414,13 @@ module ActiveAdminFilterExtensions
 
         case options.fetch(:on_invalid, :reset)
         when :reset
-          flash.now[:error] = text
-          filter_policy_reset_keys.concat(keys)
-          keys.each { |key| params[:q].delete(key) }
+          reset_violating_filter_keys(text, keys)
         when :reject
+          # Only where a redirect means something. A CSV or JSON index is answered in one
+          # request everywhere else in the gem, a flash it cannot render would be lost, and
+          # url_for drops the format - so off the HTML path the export is bounded the :reset way.
+          return reset_violating_filter_keys(text, keys) unless request.format.html?
+
           flash[:error] = text
           # Browsers keep the original Referer across a 302, so when back IS this index the
           # bounce would re-reject itself to the browser's redirect cap. Home instead.
@@ -437,6 +440,13 @@ module ActiveAdminFilterExtensions
         else
           raise ArgumentError, "on_invalid: #{options[:on_invalid].inspect} - "                                "must be :reset, :reject or :empty"
         end
+      end
+
+      # Drop the offending key(s) and let the declared default refill through the merge.
+      def reset_violating_filter_keys(text, keys)
+        flash.now[:error] = text
+        filter_policy_reset_keys.concat(keys)
+        keys.each { |key| params[:q].delete(key) }
       end
 
       # Read by apply_filtering: an :empty policy keeps the request intact - the form must

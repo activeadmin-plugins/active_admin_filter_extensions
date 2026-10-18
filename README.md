@@ -254,7 +254,8 @@ filter :name_eq, extensions: { validate: ->(v) { ... }, on_invalid: :empty }
 
 * `:reset` - drop the offending key(s), `flash[:error]`, the declared `default:` refills.
 * `:reject` - `flash[:error]` and bounce back the way the request came (bare index when
-  there is no referer).
+  there is no referer). Off the HTML path - a CSV or JSON index - it degrades to `:reset`:
+  there is nowhere to bounce to and no flash to read.
 * `:empty` - render an empty collection with the message, keeping the admin's input in the
   form: "nothing found because the value is malformed" stops masquerading as an honestly
   empty result.
