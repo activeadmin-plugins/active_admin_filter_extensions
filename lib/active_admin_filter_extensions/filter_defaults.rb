@@ -204,9 +204,15 @@ module ActiveAdminFilterExtensions
       end
     end
 
-    # An Array default is submitted element by element; anything else as one String.
+    # An Array default is submitted element by element; anything else as one String. Blank
+    # members are dropped the way #requested_filtering_params drops them on the way back in:
+    # [nil, "published"] rides the URL as ?q[k][]=&q[k][]=published and searches the second
+    # alone, so judging the blank refuses a value nothing ever searches. A wholly blank Array
+    # is already absent.
     def default_value_strings(value)
-      value.is_a?(Array) ? value.map(&:to_s) : [value.to_s]
+      return [value.to_s] unless value.is_a?(Array)
+
+      value.map(&:to_s).reject(&:blank?)
     end
 
     def sanitize_default_value(attribute, sanitizer, value)

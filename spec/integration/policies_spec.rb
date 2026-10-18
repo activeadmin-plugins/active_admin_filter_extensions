@@ -116,6 +116,16 @@ RSpec.describe "Filter value policies", type: :feature do
       expect(page).to have_content("has an invalid value")
     end
 
+    it "ignores a blank member of an Array default" do
+      # nil became "", the validator refused it, and materialization raised on every request -
+      # for exactly the admins whose per-admin member resolved to nothing.
+      visit "/admin/nil_member_policed_posts"
+
+      expect(query_of(page.current_url)["q"]).to eq("status_in" => ["published"])
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
     it "materializes an Array default beside its validator" do
       visit "/admin/policed_boxes_posts"
 

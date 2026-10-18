@@ -107,6 +107,19 @@ file "app/admin/posts.rb", <<~RUBY
                                     } }
     end
 
+    ActiveAdmin.register Post, as: "NilMemberPolicedPost" do
+      # An Array default with a blank member beside a real one - `[current_admin_user.team,
+      # "published"]` for an admin with no team. The blank is not a value the request would
+      # search, so it is not one the validator should judge.
+      filter :status, as: :check_boxes, collection: %w[draft published],
+                      extensions: { default: [nil, "published"],
+                                    validate: lambda { |value|
+                                      next "Letters only." unless value.match?(/\\A[a-z]+\\z/)
+
+                                      "No x statuses." if value.start_with?("x")
+                                    } }
+    end
+
     ActiveAdmin.register Post, as: "BooleanPost" do
       filter :starred, extensions: { default: true }
     end
