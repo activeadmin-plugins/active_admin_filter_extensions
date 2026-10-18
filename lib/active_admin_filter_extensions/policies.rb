@@ -166,12 +166,15 @@ module ActiveAdminFilterExtensions
 
       def filter_policy_message(attribute, options, message, interpolations = {})
         return message if message.is_a?(String)
+        # `message:` on the filter speaks for every symbolic violation of this filter - the
+        # app's own words without duplicating a whole validator to say them.
+        return options[:message] if options[:message]
 
         values = { filter: options[:label] || attribute.to_s.humanize }.merge(interpolations)
         # The English texts ship as plain i18n (config/locales/en.yml); an application
         # overrides them under the same keys. Unknown symbols read as :invalid.
         I18n.t(message, scope: :active_admin_filter_extensions,
-                        default: :"active_admin_filter_extensions.invalid", **values)
+                        default: :invalid, **values)
       end
     end
   end

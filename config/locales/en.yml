@@ -1,5 +1,5 @@
 # The gem's violation messages. Override any of them in your application's locale files
-# under the same keys.
+# under the same keys; `message:` on a filter overrides per filter.
 en:
   active_admin_filter_extensions:
     invalid: "%{filter} filter has an invalid value."

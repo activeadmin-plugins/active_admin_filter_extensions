@@ -248,6 +248,19 @@ file "app/admin/posts.rb", <<~RUBY
                       extensions: { default: { in: -> { {} } } }
     end
 
+    ActiveAdmin.register Post, as: "IpGuardedPost" do
+      # The built-in validator with the app's own words - no lambda duplication just to keep a
+      # legacy message.
+      filter :title_cont, as: :string, extensions: { validate: :ip, message: "Allowed IP address is incorrect!" }
+    end
+
+    ActiveAdmin.register Post, as: "BananaMessagePost" do
+      # Its validator answers a Symbol no locale defines - the generic message must speak,
+      # not a translation-missing trace.
+      filter :title_cont, as: :string,
+                          extensions: { validate: ->(value) { value.match?(/\\d/) && :bogus_key } }
+    end
+
     ActiveAdmin.register Post, as: "NoDefaultsPost" do
       filter :title
     end

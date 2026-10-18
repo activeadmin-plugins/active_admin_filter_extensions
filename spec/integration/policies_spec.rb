@@ -93,4 +93,25 @@ RSpec.describe "Filter value policies", type: :feature do
     end
   end
 
+  describe "message: overrides the violation text" do
+    it "speaks the filter's own words for a built-in validator" do
+      visit "/admin/ip_guarded_posts?q%5Btitle_cont%5D=not-an-ip"
+
+      expect(page).to have_content("Allowed IP address is incorrect!")
+      expect(page).to have_no_content("filter has an invalid value")
+    end
+
+    it "falls back to the generic message for a Symbol no locale defines" do
+      visit "/admin/banana_message_posts?q%5Btitle_cont%5D=keep123"
+
+      expect(page).to have_content("Title cont filter has an invalid value.")
+      expect(page).to have_no_content("translation missing")
+    end
+
+    it "stays quiet for a valid value" do
+      visit "/admin/ip_guarded_posts?q%5Btitle_cont%5D=10.0.0.0%2F8"
+
+      expect(page).to have_no_content("Allowed IP address is incorrect!")
+    end
+  end
 end
