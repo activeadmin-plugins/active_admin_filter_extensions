@@ -3,7 +3,8 @@
 require "rails_helper"
 require "rack/utils"
 
-# The edges of :reset and of the redirect's value rewriting.
+# `on_invalid:` names what a violated policy does. :reset (the default) is covered elsewhere;
+# here the other two: :reject bounces back, :empty shows nothing but says why.
 RSpec.describe "on_invalid policies", type: :feature do
   before do
     Post.create!(title: "keep me", body: "keep body", status: "published",
@@ -14,6 +15,81 @@ RSpec.describe "on_invalid policies", type: :feature do
 
   def query_of(url)
     Rack::Utils.parse_nested_query(URI.parse(url).query.to_s)
+  end
+
+  describe ":reject" do
+    it "flashes and bounces to the bare index" do
+      visit "/admin/reject_posts?q%5Bposition_eq%5D=abc"
+
+      expect(page).to have_content("Position filter has an invalid value.")
+      expect(URI.parse(page.current_url).query).to be_nil
+      expect(page).to have_content("keep me")
+      expect(page).to have_content("drop me")
+    end
+
+    it "bounces once even when several filters are violated" do
+      # redirect_back does not break Ruby loops; without a performed? guard the second
+      # violation double-renders into a 500 instead of the promised bounce.
+      visit "/admin/reject_posts?q%5Bposition_eq%5D=abc&q%5Btitle_cont%5D=keep123"
+
+      expect(URI.parse(page.current_url).query).to be_nil
+      expect(page).to have_content("filter has an invalid value.").or have_content("must not contain digits")
+    end
+
+    it "bounces to the bare index when back is the offending URL itself" do
+      # Browsers keep the original Referer across a 302: redirect_back would re-reject the
+      # same request forever, dying at the browser's redirect cap instead of showing the
+      # error.
+      offending = "/admin/reject_posts?q%5Bposition_eq%5D=abc"
+      page.driver.header("Referer", "http://www.example.com#{offending}")
+      visit offending
+
+      expect(URI.parse(page.current_url).query).to be_nil
+      expect(page).to have_content("Position filter has an invalid value.")
+    ensure
+      page.driver.header("Referer", nil)
+    end
+
+    it "bounces once when value and window policies are violated together" do
+      visit "/admin/reject_window_posts?q%5Bpublished_date_gteq%5D=2020-01-01X&q%5Bpublished_date_lteq%5D=2026-01-01X"
+
+      expect(URI.parse(page.current_url).query).to be_nil
+      expect(page).to have_content("No X dates.")
+    end
+  end
+
+  describe ":empty" do
+    it "shows nothing, says why, and keeps the admin's input on screen" do
+      visit "/admin/empty_posts?q%5Btitle_cont%5D=keep123"
+
+      expect(page).to have_content("Title filter must not contain digits.")
+      expect(page).to have_no_content("keep me")
+      expect(page).to have_no_content("drop me")
+      expect(page).to have_field("q[title_cont]", with: "keep123")
+      expect(URI.parse(page.current_url).query).to eq("q%5Btitle_cont%5D=keep123")
+    end
+
+    it "survives the canonicalizing redirect when the sanitizer empties the value" do
+      # digits("abc") is "" - the blank would otherwise redirect away, and the next request,
+      # flagless, renders the whole table.
+      visit "/admin/empty_digits_posts?q%5Bposition_eq%5D=abc"
+
+      expect(URI.parse(page.current_url).query).to eq("q%5Bposition_eq%5D=abc")
+      expect(page).to have_content("filter has an invalid value")
+      # The admin's own input is preserved (not the sanitizer's ""): the URL carries it and
+      # the form re-renders it - as Ransack casts it for this integer attribute, so "0".
+      # The literal-text case is EmptyPost's string-attribute example above.
+      expect(page).to have_field("q[position_eq]", with: "0")
+      expect(page).to have_no_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
+    it "leaves a valid search alone" do
+      visit "/admin/empty_posts?q%5Btitle_cont%5D=drop"
+
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("keep me")
+    end
   end
 
   describe "a default against its own value policy" do

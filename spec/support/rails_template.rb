@@ -314,6 +314,39 @@ file "app/admin/posts.rb", <<~RUBY
                                         default: -> { Date.new(2026, 1, 1).. } }
     end
 
+    ActiveAdmin.register Post, as: "RejectPost" do
+      # :reject - the didww-api-3 add_integer_filter_check shape: flash and bounce back.
+      filter :title_cont, as: :string,
+                          extensions: { on_invalid: :reject,
+                                    validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
+      filter :position, as: :numeric,
+                        extensions: { on_invalid: :reject,
+                                  validate: ->(value) { :invalid unless value.match?(/\\A\\d+\\z/) } }
+    end
+
+    ActiveAdmin.register Post, as: "EmptyPost" do
+      # :empty - the invoice name_eq shape: show nothing, but SAY WHY, and keep the admin's
+      # input in the form so they can fix it.
+      filter :title_cont, as: :string,
+                          extensions: { on_invalid: :empty,
+                                    validate: ->(value) { value.match?(/\\d/) && "Title filter must not contain digits." } }
+    end
+
+    ActiveAdmin.register Post, as: "EmptyDigitsPost" do
+      # :empty behind a sanitizer that can empty the value: the verdict must survive the
+      # canonicalizing redirect, or the next request renders the whole table.
+      filter :position_eq, as: :string,
+                          extensions: { sanitize: :digits, validate: :integer, on_invalid: :empty }
+    end
+
+    ActiveAdmin.register Post, as: "RejectWindowPost" do
+      # Value AND window policies on one :reject filter: the second violation must not answer
+      # an already-answered request.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 30.days, on_invalid: :reject,
+                                            validate: ->(value) { value.include?("X") && "No X dates." } }
+    end
+
     ActiveAdmin.register Post, as: "BananaSanitizePost" do
       # Its sanitizer grows the value on every pass - the suite proves that raises instead of
       # redirect-looping forever.

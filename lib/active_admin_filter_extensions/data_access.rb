@@ -12,6 +12,10 @@ module ActiveAdminFilterExtensions
 
     def apply_filtering(chain)
       @search = chain.ransack(filtering_params)
+      # An :empty policy keeps the request intact - the form still shows what the admin
+      # typed - and blanks the collection instead.
+      return @search.result.none if filter_policy_render_empty?
+
       @search.result
     end
   end

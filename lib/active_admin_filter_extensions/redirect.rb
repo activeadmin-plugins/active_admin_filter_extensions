@@ -22,6 +22,10 @@ module ActiveAdminFilterExtensions
         # redirect - #filtering_params applies them to a CSV or JSON index all the same - so a
         # non-HTML request just keeps its one-request shape.
         next unless request.get? && request.format.html?
+        # An :empty verdict renders THIS request - nothing to show, the admin's input kept on
+        # screen. The canonicalizing redirect would launder the flagged value away and the
+        # next request, flagless, would render the whole table.
+        next if filter_policy_render_empty?
 
         effective = filtering_params
         # Compared against the URL's own q - not params[:q], which a sanitize: policy may

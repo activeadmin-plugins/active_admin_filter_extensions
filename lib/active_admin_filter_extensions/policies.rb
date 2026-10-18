@@ -101,6 +101,10 @@ module ActiveAdminFilterExtensions
         return if q.blank? || !q.respond_to?(:each_pair)
 
         visible_filters.each do |attribute, options|
+          # A :reject already answered this request with a redirect; a second violation must
+          # not answer it again.
+          return if performed?
+
           next unless options.values_at(:sanitize, :validate, :max_range, :min).any?
 
           keys = filter_search_keys(attribute, options)
@@ -113,8 +117,12 @@ module ActiveAdminFilterExtensions
         return unless options[:sanitize] || options[:validate]
 
         keys.each do |key|
+            return if performed?
+
             value = q[key]
             next if value.nil? || (value.is_a?(String) && value.blank?)
+
+            original = value
 
             # Ransack executes a Hash- or Array-wrapped value byte-identically to the scalar;
             # a policed key that is not a plain string is a bypass, not a shape to ignore.
@@ -145,7 +153,12 @@ module ActiveAdminFilterExtensions
 
             message = ::MethodOrProcHelper.render_in_context(self, Validators.resolve(validator), value)
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.
-            apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), message) if message
+            next unless message
+
+            # :empty promises the ADMIN'S input stays on screen; the sanitized attempt
+            # searched nothing, so it has nothing to show for itself.
+            q[key] = original if options.fetch(:on_invalid, :reset) == :empty
+            apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), message)
           end
       end
 
@@ -160,6 +173,8 @@ module ActiveAdminFilterExtensions
       # a bad gteq with a good lteq is still not the range the admin meant - and the declared
       # default refills.
       def enforce_window_policies(q, attribute, options, keys)
+        # A :reject value policy may just have answered this request.
+        return if performed?
         return unless options[:max_range] || options[:min]
 
         unless keys.size == 2
@@ -231,8 +246,9 @@ module ActiveAdminFilterExtensions
         nil
       end
 
-      # What a violated policy does, by name. :reset (the only one yet) drops the key(s) and
-      # lets the declared default refill.
+      # What a violated policy does, by name. :reset (default) drops the key(s) and lets the
+      # declared default refill; :reject bounces back the way it came; :empty renders nothing
+      # but keeps the admin's input on screen with the message.
       def apply_invalid_filter_policy(attribute, options, keys, message, interpolations = {})
         filter_policy_errors << attribute
         text = filter_policy_message(attribute, options, message, interpolations)
@@ -242,9 +258,32 @@ module ActiveAdminFilterExtensions
           flash.now[:error] = text
           filter_policy_reset_keys.concat(keys)
           keys.each { |key| params[:q].delete(key) }
+        when :reject
+          flash[:error] = text
+          # Browsers keep the original Referer across a 302, so when back IS this index the
+          # bounce would re-reject itself to the browser's redirect cap. Home instead.
+          referer_path = begin
+            URI.parse(request.referer.to_s).path
+          rescue URI::InvalidURIError
+            nil
+          end
+          if referer_path == request.path
+            redirect_to url_for(action: :index)
+          else
+            redirect_back fallback_location: url_for(action: :index)
+          end
+        when :empty
+          flash.now[:error] = text
+          @filter_policy_render_empty = true
         else
-          raise ArgumentError, "on_invalid: #{options[:on_invalid].inspect} - "                                "must be :reset"
+          raise ArgumentError, "on_invalid: #{options[:on_invalid].inspect} - "                                "must be :reset, :reject or :empty"
         end
+      end
+
+      # Read by apply_filtering: an :empty policy keeps the request intact - the form must
+      # still show what the admin typed - and blanks the collection instead.
+      def filter_policy_render_empty?
+        !!@filter_policy_render_empty
       end
 
       def filter_policy_message(attribute, options, message, interpolations = {})
