@@ -450,6 +450,9 @@ file "app/admin/posts.rb", <<~RUBY
       # The active-calls shape: this index answers no question at all until it is asked one.
       require_any_filter notice: "You must specify at least one filter"
 
+      # A scope tab is a question too - and the one Active Admin puts a count on.
+      scope(:published) { |posts| posts.where(status: "published") }
+
       filter :title_cont, as: :string,
                           extensions: { validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
       filter :status, as: :select, collection: %w[draft published]

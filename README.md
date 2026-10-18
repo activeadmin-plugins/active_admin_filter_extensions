@@ -242,7 +242,9 @@ require_any_filter notice: "You must specify at least one filter"
 
 `require_any_filter` makes an index answer no question until it is asked one: a bare visit -
 a blank form submission included - renders an empty collection with the notice, never the
-whole table. Resource-level on purpose: "any filter at all" belongs to no single filter.
+whole table. Resource-level on purpose: "any filter at all" belongs to no single filter. A
+scope tab counts as a question: Active Admin puts a count on it, and answering it with an empty
+page would contradict the tab.
 
 ## on_invalid: what a violated policy does
 

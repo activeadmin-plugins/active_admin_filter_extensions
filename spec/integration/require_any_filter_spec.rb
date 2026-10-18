@@ -79,6 +79,16 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_content("keep me")
   end
 
+  it "counts a scope tab as asked" do
+    # Active Admin puts a count on the tab, so rendering it empty beside "specify at least one
+    # filter" contradicted the tab the admin had just clicked.
+    visit "/admin/picky_posts?scope=published"
+
+    expect(page).to have_no_content("You must specify at least one filter")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
   it "counts a sibling predicate of a declared filter as asked" do
     visit "/admin/picky_posts?q%5Btitle_eq%5D=keep%20me"
 
