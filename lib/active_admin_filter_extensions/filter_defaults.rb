@@ -140,13 +140,18 @@ module ActiveAdminFilterExtensions
     # enforcement even runs.
     def validate_defaults_against_with_groups(defaults)
       with_groups.each do |keys|
-        answered = keys.select { |key| defaults.key?(key) || nil_default_filter_keys.include?(key) }
-        next if answered.empty? || answered.size == keys.size
+        # By member, so a half-open Range default - which fills only the end it has - answers
+        # its two-ended member rather than reading as half a group.
+        members = with_group_members(keys)
+        answered = members.select do |member|
+          member.any? { |key| defaults.key?(key) || nil_default_filter_keys.include?(key) }
+        end
+        next if answered.empty? || answered.size == members.size
 
         raise ArgumentError,
               "filters #{keys.join(', ')} are declared with: one another, but only " \
-              "#{answered.join(', ')} declare defaults - the fallback must answer the whole " \
-              "group or none of it"
+              "#{answered.flatten.join(', ')} declare defaults - the fallback must answer the " \
+              "whole group or none of it"
       end
     end
 

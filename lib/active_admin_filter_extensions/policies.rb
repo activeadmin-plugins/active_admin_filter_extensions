@@ -167,16 +167,24 @@ module ActiveAdminFilterExtensions
         # raw present? check while Ransack drops it - half the group executing silently.
         answered = requested_filtering_params || {}
         with_groups.each do |keys|
-          present = keys.select { |key| answered.key?(key) }
-          next if present.empty? || present.size == keys.size
+          members = with_group_members(keys)
+          present = members.select { |member| member.any? { |key| answered.key?(key) } }
+          next if present.empty? || present.size == members.size
 
           filter_policy_errors << keys
           filter_policy_reset_keys.concat(keys)
           names = keys.map { |k| strip_ransack_predicate(k).humanize }.uniq.join(" and ")
           flash.now[:warning] = I18n.t(:given_together, scope: :active_admin_filter_extensions,
                                        filters: names)
-          present.each { |key| q.delete(key) }
+          present.flatten.each { |key| q.delete(key) }
         end
+      end
+
+      # A group's members, not its keys: a two-ended filter submits two of them and is answered
+      # by either bound - the touched-is-answered rule required: already follows. Counted as
+      # separate keys, one bound beside the partner read as a half-answered group.
+      def with_group_members(keys)
+        keys.group_by { |key| strip_ransack_predicate(key) }.values
       end
 
       # `with: :year_eq` on a filter: its own search keys and the named partners are one

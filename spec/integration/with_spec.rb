@@ -60,6 +60,28 @@ RSpec.describe "with: filters", type: :feature do
     expect(page.body).not_to include("drop me")
   end
 
+  it "counts a two-ended member answered by either bound" do
+    # Each bound counted as a group key of its own, so one date bound beside the partner read
+    # as two of three: both reset, and with no defaults the whole table rendered - the scan the
+    # guard exists to prevent.
+    visit "/admin/paired_date_posts?q%5Bpublished_date_gteq%5D=2026-01-01&q%5Bposition_eq%5D=20"
+
+    expect(page).to have_no_content("must be given together")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "counts a two-ended member whose default fills only one end" do
+    # Same arithmetic on the fallback side: the half-open default answered one of three keys
+    # and read as a half-declared group.
+    visit "/admin/open_paired_posts"
+
+    expect(query_of(page.current_url)["q"])
+      .to eq("published_date_gteq" => "2026-05-01", "position_eq" => "20")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
   it "lets a fully-answered group through" do
     visit "/admin/paired_posts?q%5Bstatus_eq%5D=draft&q%5Bstarred_eq%5D=false"
 

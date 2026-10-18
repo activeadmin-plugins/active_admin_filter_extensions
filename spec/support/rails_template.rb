@@ -431,6 +431,14 @@ file "app/admin/posts.rb", <<~RUBY
       filter :position
     end
 
+    ActiveAdmin.register Post, as: "OpenPairedPost" do
+      # A two-ended member of a with: group whose default fills only the end it has - the group
+      # is answered by that bound, not left half-declared.
+      filter :published_date, as: :date_range,
+                              extensions: { default: -> { Date.new(2026, 5, 1).. }, with: :position_eq }
+      filter :position, extensions: { default: { eq: 20 } }
+    end
+
     ActiveAdmin.register Post, as: "PickyPost" do
       # The active-calls shape: this index answers no question at all until it is asked one.
       require_any_filter notice: "You must specify at least one filter"
