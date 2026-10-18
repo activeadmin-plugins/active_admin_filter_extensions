@@ -94,12 +94,14 @@ RSpec.describe "on_invalid policies", type: :feature do
       expect(page).to have_no_content("drop me")
     end
 
-    it "validates array elements emptied by the sanitizer and preserves the original input" do
-      visit "/admin/empty_digits_posts?q%5Bposition_eq%5D%5B%5D=abc"
+    it "validates array elements emptied by the sanitizer and keeps a checkbox input" do
+      visit "/admin/empty_digits_array_posts"
+      check "Not a number"
+      click_button "Filter"
 
       expect(page).to have_content("filter has an invalid value")
-      expect(query_of(page.current_url)["q"]).to eq("position_eq" => ["abc"])
-      expect(page).to have_field("q[position_eq]", with: "0")
+      expect(query_of(page.current_url)["q"]).to eq("status_in" => ["abc"])
+      expect(page).to have_checked_field("q[status_in][]", with: "abc")
       expect(page).to have_no_content("keep me")
       expect(page).to have_no_content("drop me")
     end
