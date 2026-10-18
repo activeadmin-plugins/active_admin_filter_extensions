@@ -127,6 +127,16 @@ RSpec.describe "with: filters", type: :feature do
     expect(page).to have_content("drop me")
   end
 
+  it "says nothing about a default slice the suppressed group is not showing" do
+    # The group imposed nothing, so the collection is unfiltered - and the notice announced a
+    # default slice over the whole table, which is the notice lying about the page.
+    visit "/admin/nil_paired_posts"
+
+    expect(page).to have_no_content("Showing published starred posts by default")
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
   it "raises when defaults answer only half the group" do
     # The fallback is held to the same all-or-none contract the enforcement imposes.
     expect { visit "/admin/banana_half_paired_posts" }

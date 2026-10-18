@@ -447,6 +447,8 @@ file "app/admin/posts.rb", <<~RUBY
     end
 
     ActiveAdmin.register Post, as: "NilPairedPost" do
+      default_filters_notice "Showing published starred posts by default"
+
       # A member of a with: group whose default opts out for this admin. Declared, so the group
       # is complete; nil, so it imposes nothing - and neither does the partner.
       filter :status, as: :select, collection: %w[draft published],

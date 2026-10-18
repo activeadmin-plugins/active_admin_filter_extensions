@@ -94,8 +94,11 @@ module ActiveAdminFilterExtensions
       requested = requested_filtering_params || {}
       if filter_defaults_apply?
         # At least one default must actually reach the search: a widened apply? beside a
-        # request that answered every defaulted key itself engaged nothing.
-        return filter_default_values.keys.any? { |key| requested[key].nil? }
+        # request that answered every defaulted key itself engaged nothing. Through
+        # #complete_with_groups, which is what decides that on the merge path - a with: group
+        # one member opted out of imposes nothing, and announcing it would describe a default
+        # slice over the unfiltered collection.
+        return complete_with_groups(filter_default_values).keys.any? { |key| requested[key].nil? }
       end
 
       required_filter_defaults_absent_from(requested).any?
