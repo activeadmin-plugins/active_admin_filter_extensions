@@ -33,6 +33,8 @@ ActiveAdmin.before_load do |_app|
   ActiveAdmin::ResourceController.helper_method :filtering_params, :filter_default_values, :visible_filters
 
   ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtension
+  ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Policies::ResourcePolicyDSL
+  ActiveAdmin::Resource.include ActiveAdminFilterExtensions::Policies::ResourcePolicySettings
   ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Notice
   ActiveAdmin::Resource.include ActiveAdminFilterExtensions::NoticeResource
   # Policies before the redirect: a sanitized or reset value must be what the redirect

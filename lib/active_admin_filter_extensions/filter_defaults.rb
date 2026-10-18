@@ -42,9 +42,22 @@ module ActiveAdminFilterExtensions
         end
 
       defaults = defaults.merge(reset_filter_default_values)
+      # A refill honors with: atomicity: pulling one member of a group pulls its partners'
+      # defaults along (the materialization check guarantees they exist) - the merge must
+      # not hand Ransack the half-group the enforcement just promised away.
+      defaults = complete_with_groups(defaults)
       return requested || {} if defaults.blank?
 
       defaults.merge(requested || {})
+    end
+
+    def complete_with_groups(defaults)
+      with_groups.each do |keys|
+        next unless keys.any? { |key| defaults.key?(key) }
+
+        defaults = filter_default_values.slice(*keys).merge(defaults)
+      end
+      defaults
     end
 
     # The defaults of keys a policy just reset - refilled whatever filter_defaults_apply?
@@ -98,6 +111,21 @@ module ActiveAdminFilterExtensions
         # Value policies first: the window must be judged on what the sanitizer stored.
         validate_default_against_value_policies(attribute, options, result, result.keys - before)
         validate_default_against_policies(attribute, options, result)
+      end.tap { |defaults| validate_defaults_against_with_groups(defaults) }
+    end
+
+    # A with: group is all-or-none in the fallback too: defaults answering part of a group
+    # would execute the very half-group the enforcement refuses - on a bare visit, where no
+    # enforcement even runs.
+    def validate_defaults_against_with_groups(defaults)
+      with_groups.each do |keys|
+        answered = keys.select { |key| defaults.key?(key) }
+        next if answered.empty? || answered.size == keys.size
+
+        raise ArgumentError,
+              "filters #{keys.join(', ')} are declared with: one another, but only " \
+              "#{answered.join(', ')} declare defaults - the fallback must answer the whole " \
+              "group or none of it"
       end
     end
 

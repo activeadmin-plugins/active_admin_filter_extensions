@@ -70,6 +70,20 @@ module ActiveAdminFilterExtensions
       end
     end
 
+    module ResourcePolicyDSL
+      # An index that answers no question until it is asked one: with no filter in the
+      # request (and none imposed by a default), render an empty collection with the notice
+      # instead of the whole table. Resource-level on purpose: "any filter at all" belongs
+      # to no single filter.
+      def require_any_filter(notice: nil)
+        config.require_any_filter_notice = notice || :require_any_filter
+      end
+    end
+
+    module ResourcePolicySettings
+      attr_accessor :require_any_filter_notice
+    end
+
     module Controller
       def self.included(base)
         # Guarded the same way Redirect is: before_load re-fires on every dev reload.
@@ -111,6 +125,53 @@ module ActiveAdminFilterExtensions
           enforce_scalar_policies(q, attribute, options, keys)
           enforce_window_policies(q, attribute, options, keys)
         end
+
+        enforce_with_groups(q) unless performed?
+      end
+
+      def enforce_with_groups(q)
+        # Membership is judged on the normalized request: a blank-array partner would pass a
+        # raw present? check while Ransack drops it - half the group executing silently.
+        answered = requested_filtering_params || {}
+        with_groups.each do |keys|
+          present = keys.select { |key| answered.key?(key) }
+          next if present.empty? || present.size == keys.size
+
+          filter_policy_errors << keys
+          filter_policy_reset_keys.concat(keys)
+          names = keys.map { |k| strip_ransack_predicate(k).humanize }.uniq.join(" and ")
+          flash.now[:warning] = I18n.t(:given_together, scope: :active_admin_filter_extensions,
+                                       filters: names)
+          present.each { |key| q.delete(key) }
+        end
+      end
+
+      # `with: :year_eq` on a filter: its own search keys and the named partners are one
+      # group - some-but-not-all answered resets the present ones with the warning. Declared
+      # on either member; mirrored declarations dedupe to the one group they both name.
+      def with_groups
+        groups = visible_filters.filter_map do |attribute, options|
+          partners = options[:with]
+          next unless partners
+
+          (filter_search_keys(attribute, options) + Array(partners).map(&:to_s)).uniq.sort
+        end.uniq
+
+        # Overlapping groups are one question: resetting half of one must not orphan the
+        # other group's membership through the shared key.
+        groups.each_with_object([]) do |keys, merged|
+          overlapping, rest = merged.partition { |group| (group & keys).any? }
+          merged.replace(rest << (overlapping.flatten + keys).uniq.sort)
+        end
+      end
+
+      def strip_ransack_predicate(name)
+        # Kept for the unit suite, which deliberately runs without Ransack (or Rails) loaded.
+        return name.to_s unless defined?(::Ransack::Predicate)
+
+        name = name.to_s.dup
+        ::Ransack::Predicate.detect_and_strip_from_string!(name)
+        name
       end
 
       def enforce_scalar_policies(q, attribute, options, keys)

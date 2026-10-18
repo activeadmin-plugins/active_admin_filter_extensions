@@ -332,6 +332,48 @@ file "app/admin/posts.rb", <<~RUBY
                                     validate: ->(value) { value.match?(/\\d/) && "Title filter must not contain digits." } }
     end
 
+    ActiveAdmin.register Post, as: "PairedPost" do
+      # The year/month shape: either both halves of the pair or neither - half a key is a
+      # question the index cannot answer honestly. Declared on both members on purpose: the
+      # mirrored declarations must dedupe to one group, one warning.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", with: :starred_eq }
+      filter :starred, extensions: { default: true, with: :status_eq }
+    end
+
+    ActiveAdmin.register Post, as: "RequiredPairPost" do
+      # A required member of a with: group: its refill must pull the partner's default along,
+      # or the merge hands Ransack the half-group the enforcement just promised away.
+      filter :title_cont, as: :string
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", required: true, with: :starred_eq }
+      filter :starred, extensions: { default: false }
+    end
+
+    ActiveAdmin.register Post, as: "ChainedPairPost" do
+      # Two with: groups sharing status_eq - resetting one half must not orphan the other
+      # group's membership: the overlap makes them one question.
+      filter :title_cont, as: :string, extensions: { with: :status_eq }
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { with: :starred_eq }
+      filter :starred
+    end
+
+    ActiveAdmin.register Post, as: "BananaHalfPairedPost" do
+      # Half the with: group declares a default - the fallback would execute the very
+      # half-group the enforcement refuses. The suite proves that raises.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", with: :starred_eq }
+      filter :starred
+    end
+
+    ActiveAdmin.register Post, as: "PairedDatePost" do
+      # Declared on ONE member - the partner's side must trip the same group - and on a
+      # two-ended filter, whose predicates the warning must still humanize away.
+      filter :published_date, as: :date_range, extensions: { with: :position_eq }
+      filter :position
+    end
+
     ActiveAdmin.register Post, as: "EmptyDigitsPost" do
       # :empty behind a sanitizer that can empty the value: the verdict must survive the
       # canonicalizing redirect, or the next request renders the whole table.
