@@ -60,6 +60,51 @@ RSpec.describe "with: filters", type: :feature do
     expect(page.body).not_to include("drop me")
   end
 
+  it "counts a two-ended member answered by either bound" do
+    # Each bound counted as a group key of its own, so one date bound beside the partner read
+    # as two of three: both reset, and with no defaults the whole table rendered - the scan the
+    # guard exists to prevent.
+    visit "/admin/paired_date_posts?q%5Bpublished_date_gteq%5D=2026-01-01&q%5Bposition_eq%5D=20"
+
+    expect(page).to have_no_content("must be given together")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "counts a two-ended member whose default fills only one end" do
+    # Same arithmetic on the fallback side: the half-open default answered one of three keys
+    # and read as a half-declared group.
+    visit "/admin/open_paired_posts"
+
+    expect(query_of(page.current_url)["q"])
+      .to eq("published_date_gteq" => "2026-05-01", "position_eq" => "20")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "keeps separately declared partners on one attribute distinct" do
+    # Two single-ended filters are two members, not one two-ended input: grouping them by the
+    # stripped attribute made half an answer pass as a whole group.
+    visit "/admin/split_pair_posts?q%5Bposition_gteq%5D=10"
+
+    expect(page).to have_content("must be given together")
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
+  it "lets both halves of a split pair through" do
+    visit "/admin/split_pair_posts?q%5Bposition_gteq%5D=10&q%5Bposition_lteq%5D=30"
+
+    expect(page).to have_no_content("must be given together")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "raises when only one half of a split pair declares a default" do
+    expect { visit "/admin/banana_split_pair_posts" }
+      .to raise_error(ArgumentError, /answer the whole\s+group or none/m)
+  end
+
   it "lets a fully-answered group through" do
     visit "/admin/paired_posts?q%5Bstatus_eq%5D=draft&q%5Bstarred_eq%5D=false"
 
@@ -92,6 +137,27 @@ RSpec.describe "with: filters", type: :feature do
 
     expect(query_of(page.current_url)["q"])
       .to eq("title_cont" => "keep", "status_eq" => "published", "starred_eq" => "false")
+  end
+
+  it "imposes nothing when a member's default resolves to nil" do
+    # A nil Proc result is how a per-admin default opts out. Read as a missing declaration it
+    # raised the half-group config error on every bare visit, per admin.
+    visit "/admin/nil_paired_posts"
+
+    expect(page).to have_no_content("must be given together")
+    expect(URI.parse(page.current_url).query).to be_nil
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
+  it "says nothing about a default slice the suppressed group is not showing" do
+    # The group imposed nothing, so the collection is unfiltered - and the notice announced a
+    # default slice over the whole table, which is the notice lying about the page.
+    visit "/admin/nil_paired_posts"
+
+    expect(page).to have_no_content("Showing published starred posts by default")
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
   end
 
   it "raises when defaults answer only half the group" do

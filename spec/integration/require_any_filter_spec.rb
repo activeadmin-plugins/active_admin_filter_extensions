@@ -21,6 +21,16 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_content("drop me")
   end
 
+  it "renders an empty result, not Active Admin's blank slate" do
+    # The guard blanks the collection; with no `q` in the request Active Admin reads that as
+    # "this table has no rows at all" and offers a Create link beside the warning.
+    visit "/admin/picky_posts"
+
+    expect(page).to have_content("No Picky Posts found")
+    expect(page).to have_no_content("There are no Picky Posts yet")
+    expect(page).to have_no_link("Create one")
+  end
+
   it "answers once asked" do
     visit "/admin/picky_posts?q%5Btitle_cont%5D=keep"
 
@@ -69,11 +79,46 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_content("keep me")
   end
 
+  it "counts a scope tab as asked" do
+    # Active Admin puts a count on the tab, so rendering it empty beside "specify at least one
+    # filter" contradicted the tab the admin had just clicked.
+    visit "/admin/picky_posts?scope=published"
+
+    expect(page).to have_no_content("You must specify at least one filter")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "treats a scope no resource declares as unasked" do
+    # Active Admin resolves an unknown scope id to nothing and applies no scope, so counting
+    # its mere presence hands back the whole table behind a scope-shaped URL.
+    visit "/admin/picky_posts?scope=does_not_exist"
+
+    expect(page).to have_content("You must specify at least one filter")
+    expect(page).to have_no_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "treats a scope no resource declares as unasked on CSV too" do
+    # The format that gets no canonicalizing hop - and no warning to read either.
+    visit "/admin/picky_posts.csv?scope=does_not_exist"
+
+    expect(page.body).not_to include("keep me")
+    expect(page.body).not_to include("drop me")
+  end
+
   it "counts a sibling predicate of a declared filter as asked" do
     visit "/admin/picky_posts?q%5Btitle_eq%5D=keep%20me"
 
     expect(page).to have_no_content("You must specify at least one filter")
     expect(page).to have_content("keep me")
+  end
+
+  it "falls back to the shipped text for a notice key no locale defines" do
+    visit "/admin/banana_notice_key_posts"
+
+    expect(page).to have_content("You must specify at least one filter")
+    expect(page).to have_no_content("translation missing")
   end
 
   it "notices when a policy just reset the only question" do

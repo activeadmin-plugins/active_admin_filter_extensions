@@ -93,6 +93,65 @@ RSpec.describe "Filter value policies", type: :feature do
     end
   end
 
+  describe "a multi-valued filter" do
+    it "lets its Array submission through" do
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5B%5D=draft"
+
+      expect(page).to have_no_content("No x statuses.")
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("keep me")
+    end
+
+    it "judges each element and resets the key on a bad one" do
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5B%5D=draft&q%5Bstatus_in%5D%5B%5D=xdraft"
+
+      expect(page).to have_content("No x statuses.")
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
+    it "ignores a blank element beside a real selection" do
+      # ?q[status_in][]=&q[status_in][]=draft is the shape a multi-select submits, and
+      # normalization drops the blank before searching - judged, it flashed an error about a
+      # value nothing searches and reset a legitimate selection to the default.
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5B%5D=&q%5Bstatus_in%5D%5B%5D=draft"
+
+      expect(page).to have_no_content("Letters only.")
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("keep me")
+    end
+
+    it "removes blank elements before sanitizing a multi-valued filter" do
+      visit "/admin/integer_sanitized_boxes_posts?q%5Bposition_in%5D%5B%5D=&q%5Bposition_in%5D%5B%5D=20"
+
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
+    it "still refuses a Hash-wrapped value on the same filter" do
+      visit "/admin/policed_boxes_posts?q%5Bstatus_in%5D%5Bvalue%5D=draft"
+
+      expect(page).to have_content("has an invalid value")
+    end
+
+    it "ignores a blank member of an Array default" do
+      # nil became "", the validator refused it, and materialization raised on every request -
+      # for exactly the admins whose per-admin member resolved to nothing.
+      visit "/admin/nil_member_policed_posts"
+
+      expect(query_of(page.current_url)["q"]).to eq("status_in" => ["published"])
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+
+    it "materializes an Array default beside its validator" do
+      visit "/admin/policed_boxes_posts"
+
+      expect(page).to have_content("keep me")
+      expect(page).to have_no_content("drop me")
+    end
+  end
+
   describe "message: overrides the violation text" do
     it "speaks the filter's own words for a built-in validator" do
       visit "/admin/ip_guarded_posts?q%5Btitle_cont%5D=not-an-ip"
@@ -103,6 +162,34 @@ RSpec.describe "Filter value policies", type: :feature do
 
     it "falls back to the generic message for a Symbol no locale defines" do
       visit "/admin/banana_message_posts?q%5Btitle_cont%5D=keep123"
+
+      expect(page).to have_content("Title cont filter has an invalid value.")
+      expect(page).to have_no_content("translation missing")
+    end
+
+    it "interpolates the override" do
+      # Used verbatim, the app's own words could never name %{limit} or %{floor}.
+      visit "/admin/interpolated_message_posts?q%5Bpublished_date_gteq%5D=2020-01-01" \
+            "&q%5Bpublished_date_lteq%5D=2026-01-01"
+
+      expect(page).to have_content("Pick at most 90 days.")
+    end
+
+    it "does not refuse a blank default" do
+      # Blank is no value: the URL cannot carry it and Ransack would strip it, so judging it
+      # raised over a default that never reaches a search.
+      visit "/admin/blank_default_policed_posts"
+
+      expect(URI.parse(page.current_url).query).to be_nil
+      expect(page).to have_content("keep me")
+      expect(page).to have_content("drop me")
+    end
+
+    it "falls back to the generic text for a parameterized symbol it cannot interpolate" do
+      # The docs invite a validate: that returns a gem scope symbol; the parameterized ones
+      # have nothing to interpolate from, and raising there 500s the request the policy is
+      # meant to answer.
+      visit "/admin/parameterized_symbol_posts?q%5Btitle_cont%5D=keep123"
 
       expect(page).to have_content("Title cont filter has an invalid value.")
       expect(page).to have_no_content("translation missing")

@@ -112,6 +112,16 @@ RSpec.describe "The redirect", type: :feature do
     expect(page).to have_content("drop me")
   end
 
+  it "does not chase an Array default whose members are all blank" do
+    # [nil] survives a plain blank-reject, serializes to ?q[k][]= and parses back as [""] -
+    # which normalization drops, so the defaults re-apply and the two sides never agree.
+    visit "/admin/nil_member_default_posts"
+
+    expect(URI.parse(page.current_url).query).to be_nil
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
   it "does not redirect a resource that declares no defaults" do
     visit "/admin/no_defaults_posts"
 

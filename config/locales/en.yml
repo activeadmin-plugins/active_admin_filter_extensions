@@ -4,7 +4,7 @@ en:
   active_admin_filter_extensions:
     invalid: "%{filter} filter has an invalid value."
     range_invalid: "%{filter} filter has an invalid date range value."
-    range_too_wide: "%{filter} filter allows a maximum date range of %{limit} days."
+    range_too_wide: "%{filter} filter allows a maximum date range of %{limit}."
     before_floor: "%{filter} filter cannot start before %{floor}."
     given_together: "%{filters} filters must be given together."
     require_any_filter: "You must specify at least one filter"

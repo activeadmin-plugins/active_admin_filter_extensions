@@ -29,7 +29,11 @@ module ActiveAdminFilterExtensions
         end
 
       names.map { |name| name.to_s[/\Aq\[([^\]]+)\]/, 1] || name.to_s }
-    rescue StandardError => e
+      # Narrow on purpose: #policy_search_keys answers an ArgumentError from here by searching
+      # the declared filter name instead, so a catch-all would turn any internal failure into a
+      # policy quietly guarding the wrong key. A resource with no `ransack`, and an input class
+      # that does not exist, are both NameErrors - and they are what "cannot derive" means.
+    rescue NameError => e
       raise_filter_default_error(attribute, "could not work out which search key it submits (#{e.class}: #{e.message}) - name the predicate with a Hash instead")
     end
 
@@ -46,7 +50,7 @@ module ActiveAdminFilterExtensions
     # a way nothing reports: `Proc#[]` is `call`, so Formtastic asking `input_html[:multiple]`
     # invokes it, gets a truthy Hash back, and a `:select` derives `_in` rather than `_eq`.
     def filter_input_options(options, builder)
-      options = options.except(*FilterOptions::NOT_FOR_INPUT, *FilterOptions::EXTENSION_KEYS)
+      options = FilterOptions.input_options(options)
       return options unless options[:input_html].is_a?(Proc)
 
       options.merge(input_html: builder.template.instance_exec(&options[:input_html]))

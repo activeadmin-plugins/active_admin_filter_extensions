@@ -4,7 +4,7 @@ source "https://rubygems.org"
 
 gemspec
 
-default_rails_version = "7.2.0"
+default_rails_version = "8.0.0"
 default_activeadmin_version = "3.5.0"
 
 gem "rails", "~> #{ENV['RAILS'] || default_rails_version}"

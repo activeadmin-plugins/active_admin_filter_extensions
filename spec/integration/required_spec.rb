@@ -30,6 +30,25 @@ RSpec.describe "required: filters", type: :feature do
     expect(page).to have_no_content("drop me")
   end
 
+  it "counts a sibling predicate of its own filter as an answer" do
+    # Judged on the derived key alone, the default merged in beside the admin's own condition:
+    # two conditions on one column, both in the canonical URL, and the notice greeting it.
+    visit "/admin/required_sibling_posts?q%5Btitle_eq%5D=drop%20me"
+
+    expect(query_of(page.current_url)["q"]).to eq("title_eq" => "drop me")
+    expect(page).to have_content("drop me")
+    expect(page).to have_no_content("Showing kept titles by default")
+  end
+
+  it "still applies beside a predicate-less stem Ransack ignores" do
+    # q[title] is no condition at all - counting it would switch a mandatory window off with a
+    # key that searches nothing.
+    visit "/admin/required_sibling_posts?q%5Btitle%5D=drop"
+
+    expect(query_of(page.current_url)["q"]).to include("title_cont" => "keep")
+    expect(page).to have_content("keep me")
+  end
+
   it "applies even to a blank filters-form submission" do
     # A required window has no 'show me everything' escape - that is what required means.
     visit "/admin/required_posts?commit=Filter"

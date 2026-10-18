@@ -47,6 +47,26 @@ RSpec.describe "structural Ransack keys", type: :feature do
     expect(page.body).not_to include("drop me")
   end
 
+  it "leaves a plain resource's own grouping alone" do
+    # q[g] is the standard Active Admin workaround for an OR search. On a resource that
+    # declares no extension there is no policy to bypass, and stripping it answered a narrowed
+    # export with the whole table.
+    visit "/admin/plain_posts.csv?q%5Bg%5D%5B0%5D%5Btitle_cont%5D=keep"
+
+    expect(page.body).to include("keep me")
+    expect(page.body).not_to include("drop me")
+  end
+
+  it "keeps a Ransack sort, which is no condition" do
+    # Stripped, q[s] was dropped from the search and erased from the canonical URL - the 302
+    # handed back a link that had lost the sort it was made for.
+    visit "/admin/posts?q%5Bs%5D=title+desc"
+
+    expect(query_of(page.current_url)["q"])
+      .to eq("s" => "title desc", "status_eq" => "published",
+             "published_date_gteq" => "2026-01-01")
+  end
+
   it "strips q[g] groupings no value policy ever saw" do
     visit "/admin/guarded_posts?q%5Bg%5D%5B0%5D%5Btitle_cont%5D=keep123"
 

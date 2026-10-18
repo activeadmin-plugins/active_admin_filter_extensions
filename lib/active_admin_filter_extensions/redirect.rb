@@ -10,6 +10,20 @@ module ActiveAdminFilterExtensions
   # redirect on every bare visit, and a bookmarked URL pins the defaults of the day it was
   # made rather than following the code.
   module Redirect
+    # The filters as a URL can carry them, so that the two sides of the comparison below are
+    # comparable at all. A value the URL drops or hands back in another shape must be absent on
+    # both sides or the hop alternates with the bare address forever: an empty Array or Hash is
+    # dropped by to_query entirely, ?q[k]= comes back with the blank stripped, and an Array of
+    # blanks comes back as the empty Array. `false` round-trips, and is a real answer.
+    def self.canonical_filters(filters)
+      filters.each_with_object({}) do |(key, value), result|
+        value = value.reject { |element| element != false && element.blank? } if value.is_a?(Enumerable) && !value.is_a?(Hash)
+        next if value != false && value.blank?
+
+        result[key] = value
+      end
+    end
+
     def self.included(base)
       # ActiveAdmin.before_load fires on every dev-mode reload against the same non-reloaded
       # controller class, and Ruby runs this hook on every include call - without the guard the
@@ -36,10 +50,8 @@ module ActiveAdminFilterExtensions
         # so the equality below compares Hashes on both sides.
         requested = nil unless requested.is_a?(Hash)
 
-        # A blank value is one the URL cannot round-trip: an empty Array or Hash is dropped
-        # by to_query entirely, and ?q[k]= comes back in with the blank stripped - redirecting
-        # on either alternates with the bare URL forever. Blanks stay out of the redirect.
-        effective = effective.reject { |_, value| value != false && value.blank? }
+        effective = Redirect.canonical_filters(effective)
+        requested = Redirect.canonical_filters(requested) if requested
 
         # One redirect, not a loop, whatever #filter_defaults_apply? has been widened to: once
         # the query string says exactly what the search runs, the two sides are equal and the

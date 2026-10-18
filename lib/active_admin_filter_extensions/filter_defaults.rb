@@ -10,9 +10,14 @@ module ActiveAdminFilterExtensions
   module FilterDefaults
     # Ransack reads more than conditions out of q: `m` switches the combinator to OR - turning
     # a required, capped window into `window OR anything` - and `g` nests whole condition
-    # groups no value policy ever saw. No Active Admin filter form submits them; here they are
-    # a bypass, not an answer, and they are stripped before anything reads the request.
-    RANSACK_STRUCTURE = %w[m g c s conditions sorts groupings combinator].freeze
+    # groups no value policy ever saw. No Active Admin filter form submits them; where this gem
+    # guards the filters they are a bypass, not an answer, and they are stripped before anything
+    # reads the request. On a resource that declares nothing of this gem's there is no policy to
+    # bypass, and `q[g]` is the app's own standard OR workaround - see #strip_ransack_structure?.
+    RANSACK_STRUCTURE = %w[m g c conditions groupings combinator].freeze
+    # Sorting is not a condition: it reaches Ransack untouched, and it is not an answer to the
+    # question the defaults exist to answer.
+    RANSACK_SORT = %w[s sorts].freeze
 
     protected
 
@@ -55,9 +60,20 @@ module ActiveAdminFilterExtensions
       with_groups.each do |keys|
         next unless keys.any? { |key| defaults.key?(key) }
 
+        # A member that opted out this request leaves the group uncompletable, and half a group
+        # is the search the all-or-none contract refuses - so the group imposes nothing.
+        next defaults = defaults.except(*keys) if keys.any? { |key| nil_default_filter_keys.include?(key) }
+
         defaults = filter_default_values.slice(*keys).merge(defaults)
       end
       defaults
+    end
+
+    # The keys of filters that declare a default: which resolved to nil for this request. A nil
+    # Proc result imposes nothing - that is how a per-admin default opts out - so it is not the
+    # missing declaration the with: completeness check refuses.
+    def nil_default_filter_keys
+      @nil_default_filter_keys ||= []
     end
 
     # The defaults of keys a policy just reset - refilled whatever filter_defaults_apply?
@@ -78,8 +94,11 @@ module ActiveAdminFilterExtensions
       requested = requested_filtering_params || {}
       if filter_defaults_apply?
         # At least one default must actually reach the search: a widened apply? beside a
-        # request that answered every defaulted key itself engaged nothing.
-        return filter_default_values.keys.any? { |key| requested[key].nil? }
+        # request that answered every defaulted key itself engaged nothing. Through
+        # #complete_with_groups, which is what decides that on the merge path - a with: group
+        # one member opted out of imposes nothing, and announcing it would describe a default
+        # slice over the unfiltered collection.
+        return complete_with_groups(filter_default_values).keys.any? { |key| requested[key].nil? }
       end
 
       required_filter_defaults_absent_from(requested).any?
@@ -100,7 +119,7 @@ module ActiveAdminFilterExtensions
     # Judged on the NORMALIZED request: a q holding nothing but blanks or structural keys is
     # a bare request on every format - the CSV gets no canonicalizing hop to say otherwise.
     def filter_defaults_apply?
-      requested_filtering_params.blank? && params[:commit].blank?
+      (requested_filtering_params || {}).except(*RANSACK_SORT).blank? && params[:commit].blank?
     end
 
     # @return [Hash] the search values declared with `filter ..., default:`
@@ -110,7 +129,9 @@ module ActiveAdminFilterExtensions
 
         before = result.keys
         add_filter_default_value(result, attribute, options)
-        (@filter_default_keys ||= {})[attribute] = result.keys - before
+        added = result.keys - before
+        (@filter_default_keys ||= {})[attribute] = added
+        nil_default_filter_keys.concat(policy_search_keys(attribute, options)) if added.empty?
         # Value policies first: the window must be judged on what the sanitizer stored.
         validate_default_against_value_policies(attribute, options, result, result.keys - before)
         validate_default_against_policies(attribute, options, result)
@@ -122,13 +143,18 @@ module ActiveAdminFilterExtensions
     # enforcement even runs.
     def validate_defaults_against_with_groups(defaults)
       with_groups.each do |keys|
-        answered = keys.select { |key| defaults.key?(key) }
-        next if answered.empty? || answered.size == keys.size
+        # By member, so a half-open Range default - which fills only the end it has - answers
+        # its two-ended member rather than reading as half a group.
+        members = with_group_members(keys)
+        answered = members.select do |member|
+          member.any? { |key| defaults.key?(key) || nil_default_filter_keys.include?(key) }
+        end
+        next if answered.empty? || answered.size == members.size
 
         raise ArgumentError,
               "filters #{keys.join(', ')} are declared with: one another, but only " \
-              "#{answered.join(', ')} declare defaults - the fallback must answer the whole " \
-              "group or none of it"
+              "#{answered.flatten.join(', ')} declare defaults - the fallback must answer the " \
+              "whole group or none of it"
       end
     end
 
@@ -163,29 +189,51 @@ module ActiveAdminFilterExtensions
         value = result[key]
         next if value.nil?
 
-        # Scalar values go through as the String the URL will say - a -20 under :digits must
-        # search as "20" on every format. Multi-valued defaults are not scalar submissions.
-        if sanitizer && !value.is_a?(Enumerable)
+        # Judged the way the URL will say it: a scalar as the String it becomes, an Array
+        # element by element - the shape a multi-valued input submits.
+        if sanitizer
           resolved = Policies::Sanitizers.resolve(sanitizer)
-          sanitized = ::MethodOrProcHelper.render_in_context(self, resolved, value.to_s.dup).to_s
-          # The same fixpoint check submitted values face: without it the CSV searches the
-          # once-sanitized value while the HTML converges on another, and nobody raises.
-          if ::MethodOrProcHelper.render_in_context(self, resolved, sanitized.dup).to_s != sanitized
-            raise ArgumentError,
-                  "filter :#{attribute}'s sanitize: is not idempotent " \
-                  "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
-                  "a default must sanitize to a fixpoint"
-          end
-
-          result[key] = sanitized
+          result[key] = sanitize_default_value(attribute, resolved, value)
         end
         next unless validator
-        next unless ::MethodOrProcHelper.render_in_context(self, Policies::Validators.resolve(validator), result[key].to_s)
+
+        resolved_validator = Policies::Validators.resolve(validator)
+        next unless default_value_strings(result[key])
+                    .any? { |string| ::MethodOrProcHelper.render_in_context(self, resolved_validator, string) }
 
         raise ArgumentError,
               "filter :#{attribute} declares a default that violates its own validate: " \
               "policy - the fallback must be a value the filter accepts"
       end
+    end
+
+    # The values a default actually submits: an Array element by element, anything else as the
+    # one String the URL will say. Blank ones are dropped the way #requested_filtering_params
+    # drops them on the way back in - [nil, "published"] rides the URL as
+    # ?q[k][]=&q[k][]=published and searches the second alone, and a blank scalar cannot ride
+    # it at all - so judging either refuses a value nothing ever searches.
+    #
+    # Array.wrap, not Array(): it asks for to_ary, so a Hash default stays one value to judge
+    # instead of being splatted into its pairs.
+    def default_value_strings(value)
+      Array.wrap(value).map(&:to_s).reject(&:blank?)
+    end
+
+    def sanitize_default_value(attribute, sanitizer, value)
+      return value.map { |element| sanitize_default_value(attribute, sanitizer, element) } if value.is_a?(Array)
+      return value if value.is_a?(Enumerable)
+
+      sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.to_s.dup).to_s
+      # The same fixpoint check submitted values face: without it the CSV searches the
+      # once-sanitized value while the HTML converges on another, and nobody raises.
+      if ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
+        raise ArgumentError,
+              "filter :#{attribute}'s sanitize: is not idempotent " \
+              "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
+              "a default must sanitize to a fixpoint"
+      end
+
+      sanitized
     end
 
     private
@@ -204,9 +252,22 @@ module ActiveAdminFilterExtensions
       requested = requested.transform_values do |value|
         value.is_a?(Array) ? value.reject { |element| element.blank? && element != false } : value
       end
+      strip_structure = strip_ransack_structure?
       requested.reject do |key, value|
-        RANSACK_STRUCTURE.include?(key.to_s) || (value.blank? && value != false)
+        (strip_structure && RANSACK_STRUCTURE.include?(key.to_s)) || (value.blank? && value != false)
       end
+    end
+
+    # Whether this resource declares anything of this gem's. Only then is a structural key a
+    # bypass of something; on every other resource it is the app's own search and stripping it
+    # silently widens the export to the whole table.
+    def strip_ransack_structure?
+      return @strip_ransack_structure if defined?(@strip_ransack_structure)
+
+      @strip_ransack_structure =
+        active_admin_config.require_any_filter_notice.present? ||
+        active_admin_config.default_filters_notice.present? ||
+        visible_filters.any? { |_attribute, options| options.key?(:extensions) }
     end
 
     # A default is a value, and where that value goes is the input's business - see SearchKeys.
@@ -242,6 +303,13 @@ module ActiveAdminFilterExtensions
       if default.is_a?(Range)
         unless names.size == 2
           raise_filter_default_error(attribute, "a Range needs an input with two ends, and this one submits #{names.join(' and ')}")
+        end
+
+        # The input submits gteq and lteq, so an excluded end has no spelling here: stored as
+        # lteq it would search the very bound the Range left out, quietly and in every copied
+        # URL. An endless exclusive Range has no end to exclude and is fine.
+        if default.exclude_end? && !default.end.nil?
+          raise_filter_default_error(attribute, "an exclusive Range has no gteq/lteq spelling, so its end would be searched after all - use an inclusive range, or name the predicates with a Hash")
         end
 
         result[names.first] = default.begin unless default.begin.nil?

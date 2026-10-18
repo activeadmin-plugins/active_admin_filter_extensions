@@ -137,8 +137,12 @@ module ActiveAdminFilterExtensions
         return if notice.nil? || any_declared_filter_answered?
 
         @filter_policy_render_empty = true
+        # Active Admin reads a q-less index as "this table has no rows" and renders the blank
+        # slate, Create link and all; a present-but-empty q renders an empty result instead.
+        params[:q] ||= {}
         flash.now[:warning] =
-          notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions)
+          notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions,
+                                                 default: :require_any_filter)
       end
 
       # Ransack silently ignores a condition nobody declared - junk, a stale bookmark after
@@ -146,6 +150,13 @@ module ActiveAdminFilterExtensions
       # when a declared filter submits it as-is (scope-named filters carry no predicate), or
       # when it carries a real predicate on a declared filter's attribute.
       def any_declared_filter_answered?
+        # A scope tab is a question, and the one Active Admin puts a count on: answering it
+        # with an empty page and "specify at least one filter" contradicts the tab. One Active
+        # Admin actually resolves, though - #current_scope is nil for an id no resource
+        # declares, and an unresolved scope narrows nothing, so counting its mere presence
+        # hands back the whole table behind a scope-shaped URL.
+        return true if params[:scope].present? && current_scope.present?
+
         exact = visible_filters.flat_map { |attribute, options| policy_search_keys(attribute, options) }
         bases = exact.map { |key| strip_ransack_predicate(key) }
 
@@ -163,15 +174,40 @@ module ActiveAdminFilterExtensions
         # raw present? check while Ransack drops it - half the group executing silently.
         answered = requested_filtering_params || {}
         with_groups.each do |keys|
-          present = keys.select { |key| answered.key?(key) }
-          next if present.empty? || present.size == keys.size
+          members = with_group_members(keys)
+          present = members.select { |member| member.any? { |key| answered.key?(key) } }
+          next if present.empty? || present.size == members.size
 
           filter_policy_errors << keys
           filter_policy_reset_keys.concat(keys)
           names = keys.map { |k| strip_ransack_predicate(k).humanize }.uniq.join(" and ")
           flash.now[:warning] = I18n.t(:given_together, scope: :active_admin_filter_extensions,
                                        filters: names)
-          present.each { |key| q.delete(key) }
+          present.flatten.each { |key| q.delete(key) }
+        end
+      end
+
+      # A group's members, not its keys: a two-ended filter submits two of them and is answered
+      # by either bound - the touched-is-answered rule required: already follows. Counted as
+      # separate keys, one bound beside the partner read as a half-answered group.
+      #
+      # Only keys ONE input submits together are combined. Grouping by the stripped attribute
+      # instead would also merge two single-ended filters declared separately on one column
+      # (position_gteq with: position_lteq), and half that answer would pass as a whole group.
+      def with_group_members(keys)
+        shared = multi_key_filter_keys.filter_map do |input_keys|
+          own = input_keys & keys
+          own if own.size > 1
+        end
+
+        (keys - shared.flatten).map { |key| [key] } + shared
+      end
+
+      # The key sets of filters whose input submits more than one - the two-ended ones.
+      def multi_key_filter_keys
+        @multi_key_filter_keys ||= visible_filters.filter_map do |attribute, options|
+          keys = policy_search_keys(attribute, options)
+          keys if keys.size > 1
         end
       end
 
@@ -217,7 +253,15 @@ module ActiveAdminFilterExtensions
       def policy_search_keys(attribute, options)
         filter_search_keys(attribute, options)
       rescue ArgumentError
+        fallback_search_key_attributes << attribute
         [attribute.to_s]
+      end
+
+      # Which filters got their key from the fallback rather than from their input. A window
+      # policy reads this: one key is a configuration error when the input said so, and merely
+      # unknowable when nothing could ask the input.
+      def fallback_search_key_attributes
+        @fallback_search_key_attributes ||= []
       end
 
       def enforce_scalar_policies(q, attribute, options, keys)
@@ -231,34 +275,33 @@ module ActiveAdminFilterExtensions
 
             original = value
 
-            # Ransack executes a Hash- or Array-wrapped value byte-identically to the scalar;
-            # a policed key that is not a plain string is a bypass, not a shape to ignore.
-            unless value.is_a?(String)
+            # A `:check_boxes` or multi-select filter submits an Array of Strings - the shape
+            # that input legitimately has - so the policies judge it element by element. Any
+            # other shape (a Hash, a nested Array) executes byte-identically to the scalar on
+            # Ransack's side and is a bypass, not a shape to ignore.
+            unless policed_value_shape?(value)
               apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), :invalid)
               next
             end
 
+            value = value.reject(&:blank?) if value.is_a?(Array)
+
             if (sanitizer = options[:sanitize])
               sanitizer = Sanitizers.resolve(sanitizer)
-              # On dup'd copies: a sanitizer that mutates in place and returns the same
-              # object would otherwise be compared against itself and wave its loop through.
-              sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.dup).to_s
-              # The sanitized value lands in the URL and comes back for
-              # another pass - a sanitizer that keeps rewriting its own output redirect-loops
-              # the index into unreachability. Catch it on the first request instead.
-              if sanitized != value &&
-                 ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
-                raise ArgumentError,
-                      "filter :#{attribute}'s sanitize: is not idempotent "                       "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - "                       "that is an infinite redirect"
-              end
-
+              sanitized = sanitize_policed_value(attribute, sanitizer, value)
               value = sanitized
               q[key] = value
             end
 
             next unless (validator = options[:validate])
 
-            message = ::MethodOrProcHelper.render_in_context(self, Validators.resolve(validator), value)
+            validator = Validators.resolve(validator)
+            # Blank input array elements are discarded before searching - ?q[k][]=&q[k][]=draft
+            # is the shape a multi-select submits - so remove them before sanitizing. Sanitized
+            # elements are all judged, including ones the sanitizer emptied.
+            elements = value.is_a?(Array) ? value : [value]
+            message = elements.lazy
+                              .filter_map { |element| ::MethodOrProcHelper.render_in_context(self, validator, element) }.first
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.
             next unless message
 
@@ -267,6 +310,32 @@ module ActiveAdminFilterExtensions
             q[key] = original if options.fetch(:on_invalid, :reset) == :empty
             apply_invalid_filter_policy(attribute, options, scalar_reset_scope(options, keys, key), message)
           end
+      end
+
+      # A String, or an Array of Strings - what a multi-valued input submits.
+      def policed_value_shape?(value)
+        value.is_a?(String) || (value.is_a?(Array) && value.all?(String))
+      end
+
+      # Element-wise for an Array, so a multi-valued filter is sanitized the way it is
+      # submitted. On dup'd copies: a sanitizer that mutates in place and returns the same
+      # object would otherwise be compared against itself and wave its loop through.
+      def sanitize_policed_value(attribute, sanitizer, value)
+        return value.map { |element| sanitize_policed_value(attribute, sanitizer, element) } if value.is_a?(Array)
+
+        sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.dup).to_s
+        # The sanitized value lands in the URL and comes back for another pass - a sanitizer
+        # that keeps rewriting its own output redirect-loops the index into unreachability.
+        # Catch it on the first request instead.
+        if sanitized != value &&
+           ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
+          raise ArgumentError,
+                "filter :#{attribute}'s sanitize: is not idempotent " \
+                "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
+                "that is an infinite redirect"
+        end
+
+        sanitized
       end
 
       # On a window-policied filter a value violation resets ALL its keys, not just the
@@ -285,6 +354,10 @@ module ActiveAdminFilterExtensions
         return unless options[:max_range] || options[:min]
 
         unless keys.size == 2
+          # Nothing could ask the input what it submits, so one key is not a verdict about the
+          # declaration - and raising here is the 500 the fallback exists to prevent.
+          return warn_underivable_window(attribute) if fallback_search_key_attributes.include?(attribute)
+
           raise ArgumentError,
                 "filter :#{attribute} declares max_range:/min: but its input submits "                 "#{keys.join(' and ')} - a window policy needs a two-ended input"
         end
@@ -300,6 +373,25 @@ module ActiveAdminFilterExtensions
         apply_invalid_filter_policy(attribute, options, keys, violation.first, violation.last)
       end
 
+      # Once per resource: an index is hot, and the declaration is the same on every request.
+      def warn_underivable_window(attribute)
+        warned = self.class.instance_variable_get(:@extensions_underivable_windows) ||
+                 self.class.instance_variable_set(:@extensions_underivable_windows, [])
+        return if warned.include?(attribute)
+
+        warned << attribute
+        policy_logger&.warn(
+          "filter :#{attribute} declares max_range:/min: but its search key could not be " \
+          "derived, so the window is not enforced - name the predicates with a Hash"
+        )
+        nil
+      end
+
+      # Kept for the unit suite, which deliberately runs without Rails loaded.
+      def policy_logger
+        ::Rails.logger if defined?(::Rails)
+      end
+
       def window_violation(options, from_raw, to_raw)
         from = parse_window_bound(from_raw)
         to   = parse_window_bound(to_raw)
@@ -307,38 +399,49 @@ module ActiveAdminFilterExtensions
         return [:range_invalid, {}] if (from_raw.present? && from.nil?) || (to_raw.present? && to.nil?)
         return [:range_invalid, {}] if from && to && from > to
 
-        if (floor = options[:min])
-          # in_time_zone, not to_time: the bounds are parsed in Time.zone, and Date#to_time
-          # speaks the SERVER zone - apart, a floor-equal bound is off by the offset.
-          floor = ::MethodOrProcHelper.render_in_context(self, floor).in_time_zone
-          if [from, to].compact.any? { |bound| bound < floor }
-            return [:before_floor, { floor: floor.to_date }]
-          end
+        floor = window_floor(options)
+
+        if floor && [from, to].compact.any? { |bound| bound < floor }
+          return [:before_floor, { floor: floor.to_date }]
         end
 
         if (max = options[:max_range])
           # An upper bound alone is an infinitely wide window - the outage query the cap
           # exists to refuse.
-          return [:range_too_wide, { limit: (max / 1.day).to_i }] if from.nil? && to
+          return [:range_too_wide, { limit: window_limit_text(max) }] if from.nil? && to
 
           if from
             # An open upper bound is measured against now; a FUTURE lower bound with no upper
             # bound selects a not-yet-written window and passes - measuring it against now
             # would read it as inverted.
             return nil if to.nil? && from >= Time.current
-            return [:range_too_wide, { limit: (max / 1.day).to_i }] if (to || Time.current) - from > max
+            return [:range_too_wide, { limit: window_limit_text(max) }] if (to || Time.current) - from > max
           end
         end
 
         # A min: standing alone still refuses a window with no lower bound - everything
         # before the floor is the query the floor exists to refuse. After max_range:, whose
         # too-wide verdict is the more actionable one when both are declared.
-        if from.nil? && to && (floor = options[:min])
-          floor = ::MethodOrProcHelper.render_in_context(self, floor).in_time_zone
-          return [:before_floor, { floor: floor.to_date }]
-        end
+        return [:before_floor, { floor: floor.to_date }] if from.nil? && to && floor
 
         nil
+      end
+
+      # The cap in the units it was declared in: divided into whole days, every cap shorter than
+      # one reported itself as "0 days".
+      def window_limit_text(max)
+        max.is_a?(::ActiveSupport::Duration) ? max.inspect : "#{max.to_i / 1.day} days"
+      end
+
+      # `min:` resolved for this request, once. nil imposes nothing - that is how a per-admin
+      # floor opts out, the way a nil default: does.
+      def window_floor(options)
+        floor = options[:min]
+        return nil unless floor
+
+        # in_time_zone, not to_time: the bounds are parsed in Time.zone, and Date#to_time speaks
+        # the SERVER zone - apart, a floor-equal bound is off by the offset.
+        ::MethodOrProcHelper.render_in_context(self, floor)&.in_time_zone
       end
 
       def parse_window_bound(raw)
@@ -362,10 +465,13 @@ module ActiveAdminFilterExtensions
 
         case options.fetch(:on_invalid, :reset)
         when :reset
-          flash.now[:error] = text
-          filter_policy_reset_keys.concat(keys)
-          keys.each { |key| params[:q].delete(key) }
+          reset_violating_filter_keys(text, keys)
         when :reject
+          # Only where a redirect means something. A CSV or JSON index is answered in one
+          # request everywhere else in the gem, a flash it cannot render would be lost, and
+          # url_for drops the format - so off the HTML path the export is bounded the :reset way.
+          return reset_violating_filter_keys(text, keys) unless request.format.html?
+
           flash[:error] = text
           # Browsers keep the original Referer across a 302, so when back IS this index the
           # bounce would re-reject itself to the browser's redirect cap. Home instead.
@@ -387,6 +493,13 @@ module ActiveAdminFilterExtensions
         end
       end
 
+      # Drop the offending key(s) and let the declared default refill through the merge.
+      def reset_violating_filter_keys(text, keys)
+        flash.now[:error] = text
+        filter_policy_reset_keys.concat(keys)
+        keys.each { |key| params[:q].delete(key) }
+      end
+
       # Read by apply_filtering: an :empty policy keeps the request intact - the form must
       # still show what the admin typed - and blanks the collection instead.
       def filter_policy_render_empty?
@@ -395,15 +508,31 @@ module ActiveAdminFilterExtensions
 
       def filter_policy_message(attribute, options, message, interpolations = {})
         return message if message.is_a?(String)
-        # `message:` on the filter speaks for every symbolic violation of this filter - the
-        # app's own words without duplicating a whole validator to say them.
-        return options[:message] if options[:message]
 
         values = { filter: options[:label] || attribute.to_s.humanize }.merge(interpolations)
+        # `message:` on the filter speaks for every symbolic violation of this filter - the
+        # app's own words without duplicating a whole validator to say them. Interpolated, so
+        # those words can name %{limit} and %{floor} as the shipped texts do.
+        if (override = options[:message])
+          return begin
+            I18n.interpolate(override, values)
+          rescue I18n::ArgumentError
+            override
+          end
+        end
+
         # The English texts ship as plain i18n (config/locales/en.yml); an application
-        # overrides them under the same keys. Unknown symbols read as :invalid.
-        I18n.t(message, scope: :active_admin_filter_extensions,
-                        default: :invalid, **values)
+        # overrides them under the same keys.
+        policy_translation(message, values)
+      end
+
+      # A validate: may answer any Symbol in the gem's scope, including the parameterized ones -
+      # which have nothing to interpolate from. A violation message is not worth a 500, so an
+      # unknown key and a missing interpolation both read as :invalid.
+      def policy_translation(message, values)
+        I18n.t(message, scope: :active_admin_filter_extensions, raise: true, **values)
+      rescue I18n::ArgumentError
+        I18n.t(:invalid, scope: :active_admin_filter_extensions, **values)
       end
     end
   end

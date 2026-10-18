@@ -174,6 +174,44 @@ RSpec.describe ActiveAdminFilterExtensions::DataAccess do
     end
   end
 
+  describe "a required filter answered with false" do
+    # Rack never delivers a boolean - `?q[starred_eq]=false` arrives as the String - but an
+    # override of #filtering_params can, and `false` is an answer everywhere else in the gem.
+    let(:filters) { { starred_eq: { extensions: { default: true, required: true } } } }
+    let(:params) { { q: { "starred_eq" => false } } }
+
+    it "is answered, so no default engages" do
+      expect(controller.send(:filter_defaults_engaged?)).to be(false)
+    end
+  end
+
+  describe "key derivation" do
+    # Deriving builds a real input, so the unit suite reaches it through a stub. A catch-all
+    # rescue turned every internal failure into "could not work out which search key it
+    # submits", which policy_search_keys then answered with a key of its own invention.
+    def deriving(error)
+      Class.new do
+        include ActiveAdminFilterExtensions::SearchKeys
+        define_method(:build_filter_input) { |_attribute, _options| raise error }
+      end.new
+    end
+
+    it "reports an input it cannot build" do
+      # No `ransack` on the resource - what a proxy page backed by an HTTP API answers.
+      controller = deriving(NoMethodError.new("undefined method 'ransack'"))
+
+      expect { controller.send(:filter_search_keys, :created_at, {}) }
+        .to raise_error(ArgumentError, /could not work out which search key it submits/)
+    end
+
+    it "lets a failure that is not a derivation failure through" do
+      controller = deriving(RuntimeError.new("boom"))
+
+      expect { controller.send(:filter_search_keys, :created_at, {}) }
+        .to raise_error(RuntimeError, "boom")
+    end
+  end
+
   describe "a policy on a filter whose search key cannot be derived" do
     # The derivation needs a resource Ransack can search; a proxy page backed by an HTTP API
     # has none, and a policy must not turn every index of such a page into a 500. The declared
@@ -192,6 +230,23 @@ RSpec.describe ActiveAdminFilterExtensions::DataAccess do
     it "falls back to the attribute name and still enforces" do
       controller.send(:enforce_filter_value_policies)
       expect(controller.params[:q]["time_start_gteq"]).to eq("2026-01-01")
+    end
+
+    context "when the filter declares a window policy" do
+      # The fallback gives one key, and a window policy demands two - so the very page the
+      # fallback keeps alive raised "needs a two-ended input" on every request instead.
+      let(:filters) { { time_start_gteq: { extensions: { max_range: 86_400 } } } }
+      let(:params) { { q: { "time_start_gteq" => "2026-01-01" } } }
+
+      it "logs and skips the window instead of raising" do
+        warnings = []
+        logger = Object.new
+        logger.define_singleton_method(:warn) { |message| warnings << message }
+        controller.define_singleton_method(:policy_logger) { logger }
+
+        expect { controller.send(:enforce_filter_value_policies) }.not_to raise_error
+        expect(warnings.first).to match(/could not be derived/)
+      end
     end
   end
 end

@@ -95,6 +95,36 @@ file "app/admin/posts.rb", <<~RUBY
       filter :status, as: :check_boxes, collection: %w[draft published], extensions: { default: ["published"] }
     end
 
+    ActiveAdmin.register Post, as: "PolicedBoxesPost" do
+      # A multi-valued filter under a value policy: _in[] submits an Array of Strings, which
+      # is the shape this input legitimately has - not a bypass.
+      filter :status, as: :check_boxes, collection: %w[draft published],
+                      extensions: { default: ["published"],
+                                    validate: lambda { |value|
+                                      next "Letters only." unless value.match?(/\\A[a-z]+\\z/)
+
+                                      "No x statuses." if value.start_with?("x")
+                                    } }
+    end
+
+    ActiveAdmin.register Post, as: "IntegerSanitizedBoxesPost" do
+      filter :position, as: :check_boxes, collection: [1, 20],
+                        extensions: { sanitize: ->(value) { Integer(value, 10).to_s }, validate: :integer }
+    end
+
+    ActiveAdmin.register Post, as: "NilMemberPolicedPost" do
+      # An Array default with a blank member beside a real one - `[current_admin_user.team,
+      # "published"]` for an admin with no team. The blank is not a value the request would
+      # search, so it is not one the validator should judge.
+      filter :status, as: :check_boxes, collection: %w[draft published],
+                      extensions: { default: [nil, "published"],
+                                    validate: lambda { |value|
+                                      next "Letters only." unless value.match?(/\\A[a-z]+\\z/)
+
+                                      "No x statuses." if value.start_with?("x")
+                                    } }
+    end
+
     ActiveAdmin.register Post, as: "BooleanPost" do
       filter :starred, extensions: { default: true }
     end
@@ -119,6 +149,13 @@ file "app/admin/posts.rb", <<~RUBY
       filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1) }
     end
 
+    ActiveAdmin.register Post, as: "BananaExclusiveRangePost" do
+      # The excluded end has no gteq/lteq spelling - the suite proves that raises instead of
+      # searching the day the Range left out.
+      filter :published_date, as: :date_range,
+                              extensions: { default: -> { Date.new(2026, 1, 1)...Date.new(2026, 2, 1) } }
+    end
+
     ActiveAdmin.register Post, as: "ProcInputHtmlPost" do
       filter :status, as: :select, collection: %w[draft published],
                       input_html: proc { { class: "select2" } }, extensions: { default: "published" }
@@ -140,6 +177,21 @@ file "app/admin/posts.rb", <<~RUBY
       # A default that resolves to an empty Array - `-> { current_admin_user.visible_ids }` on an
       # admin with none - is a value to_query cannot carry into a URL.
       filter :position, as: :numeric, extensions: { default: { in: -> { [] } } }
+    end
+
+    ActiveAdmin.register Post, as: "NilMemberDefaultPost" do
+      # `default: -> { [current_admin_user.team_id] }` for an admin with no team: an Array whose
+      # only member is blank survives a plain blank-reject but cannot round-trip through a URL.
+      filter :status, as: :check_boxes, collection: %w[draft published],
+                      extensions: { default: -> { [nil] } }
+    end
+
+    ActiveAdmin.register Post, as: "BlankDefaultPolicedPost" do
+      # A blank default beside a validate:. Blank is no value - the URL cannot even carry it -
+      # so there is nothing for the validator to refuse.
+      filter :title_cont, as: :string,
+                          extensions: { default: "",
+                                        validate: ->(value) { "Letters only." unless value.match?(/\\A[a-z]+\\z/) } }
     end
 
     ActiveAdmin.register Post, as: "BananaBlankDefaultPost" do
@@ -213,6 +265,14 @@ file "app/admin/posts.rb", <<~RUBY
                       extensions: { default: "published", required: { if: :title_cont } }
     end
 
+    ActiveAdmin.register Post, as: "RequiredSiblingPost" do
+      default_filters_notice "Showing kept titles by default"
+
+      # A :string filter carries the predicate dropdown: picking "equals" submits title_eq
+      # where the derived key is title_cont. Both are answers about the same column.
+      filter :title, extensions: { default: "keep", required: true }
+    end
+
     ActiveAdmin.register Post, as: "RequiredBananaPost" do
       # required with nothing to fall back on - the suite proves that raises.
       filter :title_cont, as: :string, extensions: { required: true }
@@ -245,6 +305,22 @@ file "app/admin/posts.rb", <<~RUBY
                                             default: -> { Date.new(2026, 5, 1)..Date.new(2026, 6, 30) } }
     end
 
+    ActiveAdmin.register Post, as: "ShortWindowPost" do
+      # A cap shorter than a day - reported in whole days it read "0 days".
+      filter :published_date, as: :date_range, extensions: { max_range: 6.hours }
+    end
+
+    ActiveAdmin.register Post, as: "StringKeyedExtensionsPost" do
+      # A string-keyed container: accepted by the unknown-key check and then silently inert.
+      filter :title_cont, as: :string, extensions: { "default" => "keep" }
+    end
+
+    ActiveAdmin.register Post, as: "NilFloorPost" do
+      # A per-admin retention floor that opts out for this admin - nil imposes nothing, the way
+      # a nil default: does.
+      filter :published_date, as: :date_range, extensions: { min: -> { nil } }
+    end
+
     ActiveAdmin.register Post, as: "ValidatedWindowPost" do
       # Value AND window policies with a default: a scalar reset must not leave half the
       # admin's window to be completed from the default pair unchecked.
@@ -266,6 +342,12 @@ file "app/admin/posts.rb", <<~RUBY
     ActiveAdmin.register Post, as: "BananaFlatOptionPost" do
       # A gem option left outside extensions: raises - flat, it would mean Formtastic things.
       filter :title_cont, as: :string, default: "keep"
+    end
+
+    ActiveAdmin.register Post, as: "HostOptionPost" do
+      # required: and min: are Formtastic input options in their own right. The gem answers to
+      # them only inside extensions:, so flat they belong to the form - not to a window policy.
+      filter :position, as: :number, required: true, min: 0
     end
 
     ActiveAdmin.register Post, as: "BananaPolicyKeyPost" do
@@ -369,12 +451,36 @@ file "app/admin/posts.rb", <<~RUBY
       filter :starred
     end
 
+    ActiveAdmin.register Post, as: "NilPairedPost" do
+      default_filters_notice "Showing published starred posts by default"
+
+      # A member of a with: group whose default opts out for this admin. Declared, so the group
+      # is complete; nil, so it imposes nothing - and neither does the partner.
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published", with: :starred_eq }
+      filter :starred, extensions: { default: -> { nil } }
+    end
+
     ActiveAdmin.register Post, as: "BananaHalfPairedPost" do
       # Half the with: group declares a default - the fallback would execute the very
       # half-group the enforcement refuses. The suite proves that raises.
       filter :status, as: :select, collection: %w[draft published],
                       extensions: { default: "published", with: :starred_eq }
       filter :starred
+    end
+
+    ActiveAdmin.register Post, as: "SplitPairPost" do
+      # Two single-ended filters on ONE attribute, linked by with:. Grouped by stripped
+      # attribute they look like one two-ended input, so half an answer passed as a whole group.
+      filter :position_gteq, as: :string, extensions: { with: :position_lteq }
+      filter :position_lteq, as: :string
+    end
+
+    ActiveAdmin.register Post, as: "BananaSplitPairPost" do
+      # Only one half of a split pair declares a default - the fallback would run the very
+      # half-group the enforcement refuses. The suite proves that raises.
+      filter :position_gteq, as: :string, extensions: { default: "10", with: :position_lteq }
+      filter :position_lteq, as: :string
     end
 
     ActiveAdmin.register Post, as: "PairedDatePost" do
@@ -384,9 +490,20 @@ file "app/admin/posts.rb", <<~RUBY
       filter :position
     end
 
+    ActiveAdmin.register Post, as: "OpenPairedPost" do
+      # A two-ended member of a with: group whose default fills only the end it has - the group
+      # is answered by that bound, not left half-declared.
+      filter :published_date, as: :date_range,
+                              extensions: { default: -> { Date.new(2026, 5, 1).. }, with: :position_eq }
+      filter :position, extensions: { default: { eq: 20 } }
+    end
+
     ActiveAdmin.register Post, as: "PickyPost" do
       # The active-calls shape: this index answers no question at all until it is asked one.
       require_any_filter notice: "You must specify at least one filter"
+
+      # A scope tab is a question too - and the one Active Admin puts a count on.
+      scope(:published) { |posts| posts.where(status: "published") }
 
       filter :title_cont, as: :string,
                           extensions: { validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
@@ -452,6 +569,27 @@ file "app/admin/posts.rb", <<~RUBY
       # not a translation-missing trace.
       filter :title_cont, as: :string,
                           extensions: { validate: ->(value) { value.match?(/\\d/) && :bogus_key } }
+    end
+
+    ActiveAdmin.register Post, as: "ParameterizedSymbolPost" do
+      # A validate: answering one of the gem's own parameterized symbols - which the docs
+      # invite - with nothing to interpolate %{limit} from.
+      filter :title_cont, as: :string,
+                          extensions: { validate: ->(value) { value.match?(/\\d/) && :range_too_wide } }
+    end
+
+    ActiveAdmin.register Post, as: "InterpolatedMessagePost" do
+      # message: in the app's own words, naming the gem's own interpolation.
+      filter :published_date, as: :date_range,
+                              extensions: { max_range: 90.days,
+                                            message: "Pick at most %{limit}." }
+    end
+
+    ActiveAdmin.register Post, as: "BananaNoticeKeyPost" do
+      # require_any_filter named with a Symbol no locale defines.
+      require_any_filter notice: :no_such_notice_key
+
+      filter :title_cont, as: :string
     end
 
     ActiveAdmin.register Post, as: "NoDefaultsPost" do

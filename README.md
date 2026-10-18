@@ -54,6 +54,25 @@ gem "active_admin_filter_extensions", github: "activeadmin-plugins/active_admin_
 
 Not on RubyGems yet; pin the tag.
 
+## The extensions: container
+
+Everything this gem adds lives under one filter option, so its names can never collide with
+Formtastic's. A gem key left flat raises rather than quietly meaning something else:
+
+```ruby
+filter :title_cont, as: :string, extensions: { default: "acme" }   # right
+filter :title_cont, as: :string, default: "acme"                  # raises
+```
+
+With one carve-out: `required:` and `min:` are Formtastic input options in their own right, so
+flat they belong to the form and pass through untouched. This gem answers to them only inside
+`extensions:`.
+
+```ruby
+filter :position, as: :number, min: 0                          # Formtastic's - renders min="0"
+filter :created_at, as: :date_range, extensions: { min: -> { 2.months.ago } }  # the gem's floor
+```
+
 ## Usage
 
 A default is a **value**. Which Ransack key it lands under is the input's business, and the
@@ -71,6 +90,8 @@ filter :title,                        extensions: { default: "acme" }
 
 **A Range** fills a two-ended input, one bound per end; leave an end off and that end is left to
 the admin. Handing a single value to a two-ended input raises, rather than picking an end for you.
+So does an exclusive range (`a...b`): the input submits `gteq` and `lteq`, so the excluded end has
+no spelling there and would be searched after all.
 
 Anything relative to now belongs in a Proc, as above. `filter` runs when the resource file is
 loaded, so `default: 1.week.ago..` would pin the window to the moment the process booted and let
@@ -221,7 +242,9 @@ require_any_filter notice: "You must specify at least one filter"
 
 `require_any_filter` makes an index answer no question until it is asked one: a bare visit -
 a blank form submission included - renders an empty collection with the notice, never the
-whole table. Resource-level on purpose: "any filter at all" belongs to no single filter.
+whole table. Resource-level on purpose: "any filter at all" belongs to no single filter. A
+scope tab counts as a question: Active Admin puts a count on it, and answering it with an empty
+page would contradict the tab.
 
 ## on_invalid: what a violated policy does
 
@@ -235,7 +258,8 @@ filter :name_eq, extensions: { validate: ->(v) { ... }, on_invalid: :empty }
 
 * `:reset` - drop the offending key(s), `flash[:error]`, the declared `default:` refills.
 * `:reject` - `flash[:error]` and bounce back the way the request came (bare index when
-  there is no referer).
+  there is no referer). Off the HTML path - a CSV or JSON index - it degrades to `:reset`:
+  there is nowhere to bounce to and no flash to read.
 * `:empty` - render an empty collection with the message, keeping the admin's input in the
   form: "nothing found because the value is malformed" stops masquerading as an honestly
   empty result.
@@ -262,7 +286,8 @@ refills. An open upper bound is measured against now; a FUTURE lower bound with 
 bound selects a not-yet-written window and passes. A default that would itself violate the
 policy raises on first use - resetting into a refused window is a loop, not a fallback.
 Messages are i18n keys under `active_admin_filter_extensions.*` (`range_invalid`,
-`range_too_wide` with `%{limit}`, `before_floor` with `%{floor}`), shipped with English
+`range_too_wide` with `%{limit}` (the cap in the units it was declared in, "90 days" or
+"6 hours"), `before_floor` with `%{floor}`), shipped with English
 defaults.
 
 ## Value policies: sanitize and validate
@@ -305,7 +330,7 @@ visit, and a bookmarked URL pins the defaults of the day it was made rather than
 the code. Non-HTML requests (CSV, JSON) are never redirected; the defaults filter them all
 the same.
 
-Three prints in small type:
+Four prints in small type:
 
 * **Code that rewrites `q` in a `before_action`** (sanitizers that delete invalid ranges,
   say) runs after the redirect has already compared the request against the defaults - the
@@ -315,6 +340,12 @@ Three prints in small type:
 * **The redirect runs after authentication but before Active Admin's index authorization**,
   so an authenticated admin without read rights on a resource still receives the 302 whose
   Location spells out that resource's defaults. Keep per-role secrets out of defaults.
+* **Ransack's structural keys are stripped on resources that declare something of this
+  gem's.** `q[m]`, `q[g]` and `q[c]` turn a required, capped window into `window OR anything`
+  and nest conditions no value policy ever sees, so where a policy guards the filters they
+  are a bypass rather than an answer. A resource that declares no extension keeps them - the
+  hand-built `q[g]` OR link is the standard Active Admin workaround. Sorting (`q[s]`) is
+  never a condition and is never touched.
 * **Anything that reads `params[:q]` for the effective filters** (drill-down links, exports)
   should read `filtering_params` instead - on the rendered page they agree, but only
   `filtering_params` is also right on the non-redirected formats.

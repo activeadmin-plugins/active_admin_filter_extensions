@@ -32,6 +32,7 @@ class FakeController
   # The resource settings the policy layer reads unconditionally in a real install.
   Config = Struct.new(:filters) do
     def require_any_filter_notice = nil
+    def default_filters_notice = nil
   end
 
   def self.before_action(*); end # the guard registers one; FakeController has no chain
