@@ -52,80 +52,121 @@ file "config/initializers/current_admin_user.rb", <<~RUBY
   end
 RUBY
 
-# One registration per filter input type. They have to be separate resources: a single index
+# The sample app registers Post once per scenario - resources are cheap and a single index
 # carrying every default at once would filter itself down to nothing.
-#
-# Only a filter name that already carries its predicate takes a scalar - see ScalarPost. For
-# everything else the predicate belongs in the Hash key, because the input decides the search
-# key: `:numeric` submits `_eq` / `_gt` / `_lt`, `:date_range` submits `_gteq` and `_lteq`,
-# `:check_boxes` submits `_in[]`.
 file "app/admin/posts.rb", <<~RUBY
-  ActiveAdmin.register Post do
-    filter :title, extensions: { default: "keep" }
+    ActiveAdmin.register Post do
+      filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
+      filter :published_date, as: :date_range, extensions: { default: -> { Date.new(2026, 1, 1).. } }
 
-    csv do
-      column :title
+      csv do
+        column :title
+      end
+
+    # One registration per filter input type - separate resources, because a single index
+    # carrying every default at once would filter itself down to nothing. Only a filter name
+    # that already carries its predicate takes a scalar (ScalarPost); for everything else the
+    # input decides the search key: `:numeric` submits `_eq`/`_gt`/`_lt`, `:date_range`
+    # submits `_gteq` and `_lteq`, `:check_boxes` submits `_in[]`.
+    ActiveAdmin.register Post, as: "StringPost" do
+      filter :title, extensions: { default: "keep" }
     end
-  end
 
-  ActiveAdmin.register Post, as: "ScalarPost" do
-    filter :title_cont, as: :string, extensions: { default: "keep" }
-  end
+    ActiveAdmin.register Post, as: "ScalarPost" do
+      filter :title_cont, as: :string, extensions: { default: "keep" }
+    end
 
-  ActiveAdmin.register Post, as: "NumericPost" do
-    filter :position, as: :numeric, extensions: { default: { gt: 10 } }
-  end
+    ActiveAdmin.register Post, as: "NumericPost" do
+      filter :position, as: :numeric, extensions: { default: { gt: 10 } }
+    end
 
-  ActiveAdmin.register Post, as: "DatePost" do
-    filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1).. }
-  end
+    ActiveAdmin.register Post, as: "DatePost" do
+      filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1).. }
+    end
 
-  ActiveAdmin.register Post, as: "SelectPost" do
-    filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
-  end
+    ActiveAdmin.register Post, as: "SelectPost" do
+      filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
+    end
 
-  ActiveAdmin.register Post, as: "CheckBoxesPost" do
-    filter :status, as: :check_boxes, collection: %w[draft published], extensions: { default: ["published"] }
-  end
+    ActiveAdmin.register Post, as: "CheckBoxesPost" do
+      filter :status, as: :check_boxes, collection: %w[draft published], extensions: { default: ["published"] }
+    end
 
-  ActiveAdmin.register Post, as: "BooleanPost" do
-    filter :starred, extensions: { default: true }
-  end
+    ActiveAdmin.register Post, as: "BooleanPost" do
+      filter :starred, extensions: { default: true }
+    end
 
-  ActiveAdmin.register Post, as: "AdminPreferencePost" do
-    filter :status_eq, as: :select, collection: %w[draft published],
-                       extensions: { default: -> { current_admin_user.default_status } }
-  end
+    ActiveAdmin.register Post, as: "AdminPreferencePost" do
+      filter :status_eq, as: :select, collection: %w[draft published],
+                         extensions: { default: -> { current_admin_user.default_status } }
+    end
 
-  ActiveAdmin.register Post, as: "ConditionalPost" do
-    filter :title, extensions: { default: "keep" }, if: -> { false }
-    filter :body, extensions: { default: "keep" }, unless: -> { true }
-    filter :status, as: :select, collection: %w[draft published],
-                    extensions: { default: "published" }, if: -> { true }
-  end
+    ActiveAdmin.register Post, as: "ConditionalPost" do
+      filter :title, extensions: { default: "keep" }, if: -> { false }
+      filter :body, extensions: { default: "keep" }, unless: -> { true }
+      filter :status, as: :select, collection: %w[draft published],
+                      extensions: { default: "published" }, if: -> { true }
+    end
 
-  ActiveAdmin.register Post, as: "PlainPost" do
-    filter :title
-  end
+    ActiveAdmin.register Post, as: "PlainPost" do
+      filter :title
+    end
 
-  ActiveAdmin.register Post, as: "NoticePost" do
-    default_filters_notice "Showing the kept ones by default"
-    filter :title, extensions: { default: "keep" }
-  end
+    ActiveAdmin.register Post, as: "NoticePost" do
+      default_filters_notice "Showing the kept ones by default"
+      filter :title, extensions: { default: "keep" }
+    end
 
-  ActiveAdmin.register Post, as: "AmbiguousPost" do
-    filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1) }
-  end
+    ActiveAdmin.register Post, as: "AmbiguousPost" do
+      filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1) }
+    end
 
-  ActiveAdmin.register Post, as: "ProcInputHtmlPost" do
-    filter :status, as: :select, collection: %w[draft published],
-                    input_html: proc { { class: "select2" } }, extensions: { default: "published" }
-  end
+    ActiveAdmin.register Post, as: "ProcInputHtmlPost" do
+      filter :status, as: :select, collection: %w[draft published],
+                      input_html: proc { { class: "select2" } }, extensions: { default: "published" }
+    end
 
-  ActiveAdmin.register Post, as: "AllHiddenPost" do
-    filter :title, if: -> { false }
-  end
-RUBY
+    ActiveAdmin.register Post, as: "AllHiddenPost" do
+      filter :title, if: -> { false }
+    end
+
+
+      # Stands in for any action that flashes and sends the admin back to the index - a batch
+      # action, a callback - whose flash must survive the index's own redirect.
+      collection_action :poke do
+        redirect_to collection_path, notice: "poked"
+      end
+    end
+
+    ActiveAdmin.register Post, as: "EmptyDefaultPost" do
+      # A default that resolves to an empty Array - `-> { current_admin_user.visible_ids }` on an
+      # admin with none - is a value to_query cannot carry into a URL.
+      filter :position, as: :numeric, extensions: { default: { in: -> { [] } } }
+    end
+
+    ActiveAdmin.register Post, as: "BananaBlankDefaultPost" do
+      # A blank default is a value ?q[k]= cannot round-trip (the blank is stripped on the way
+      # back in) - it must stay out of the redirect, not loop it.
+      filter :title_cont, as: :string, extensions: { default: "" }
+    end
+
+    ActiveAdmin.register Post, as: "WidenedPost" do
+      filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
+
+      # The README's widening example: defaults still apply to a request that carries only its
+      # pinned key. The redirect must add the default beside it - in ONE hop.
+      controller do
+        def filter_defaults_apply?
+          super || params[:q].keys == %w[title_cont]
+        end
+      end
+    end
+
+    ActiveAdmin.register Post, as: "NoDefaultsPost" do
+      filter :title
+    end
+
+  RUBY
 
 run "rm -rf test"
 route "root to: 'admin/dashboard#index'"
