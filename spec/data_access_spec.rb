@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "active_admin_filter_extensions/policies"
 
-RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
+RSpec.describe ActiveAdminFilterExtensions::DataAccess do
   subject(:searched_with) do
     chain = FakeChain.new
     controller.send(:apply_filtering, chain)
@@ -13,7 +14,7 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
   let(:params) { {} }
 
   describe "a scalar default" do
-    let(:filters) { { starred_eq: { default: true } } }
+    let(:filters) { { starred_eq: { extensions: { default: true } } } }
 
     it "applies to the filter name as it stands" do
       expect(searched_with).to eq("starred_eq" => true)
@@ -38,8 +39,22 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
     end
   end
 
+  describe "a q that is not a Hash" do
+    let(:filters) { { starred_eq: { extensions: { default: true } } } }
+
+    # Rack parses `?q=` to an empty String. It is blank, so the defaults apply - and merging
+    # them with a String must not be attempted.
+    context "when the request carries `?q=`" do
+      let(:params) { { q: "" } }
+
+      it "treats it as absent and applies the defaults" do
+        expect(searched_with).to eq("starred_eq" => true)
+      end
+    end
+  end
+
   describe "a Hash default" do
-    let(:filters) { { created_at: { as: :date_range, default: { gteq: "2020-01-01" } } } }
+    let(:filters) { { created_at: { as: :date_range, extensions: { default: { gteq: "2020-01-01" } } } } }
 
     it "keys each value by its predicate" do
       expect(searched_with).to eq("created_at_gteq" => "2020-01-01")
@@ -49,7 +64,7 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
   describe "an Array default" do
     # `filter :author, as: :check_boxes` submits as `q[author_id_in][]`, so the predicate side
     # of the key is `id_in`, not `in`.
-    let(:filters) { { author: { as: :check_boxes, default: { id_in: [1, 2] } } } }
+    let(:filters) { { author: { as: :check_boxes, extensions: { default: { id_in: [1, 2] } } } } }
 
     it "is keyed the way the input submits it" do
       expect(searched_with).to eq("author_id_in" => [1, 2])
@@ -57,7 +72,7 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
   end
 
   describe "a Proc default" do
-    let(:filters) { { position_eq: { default: -> { params[:seed] } } } }
+    let(:filters) { { position_eq: { extensions: { default: -> { params[:seed] } } } } }
     let(:params) { { seed: "7" } }
 
     it "is evaluated against the controller" do
@@ -74,14 +89,14 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
 
     it "is evaluated once per request, so it may query" do
       calls = 0
-      controller = FakeController.new(filters: { title_eq: { default: -> { calls += 1; "v" } } })
+      controller = FakeController.new(filters: { title_eq: { extensions: { default: -> { calls += 1; "v" } } } })
       3.times { controller.send(:filter_default_values) }
       expect(calls).to eq(1)
     end
   end
 
   describe "a Symbol default" do
-    let(:filters) { { title_eq: { default: :hello } } }
+    let(:filters) { { title_eq: { extensions: { default: :hello } } } }
 
     it "is a value, not a method to send" do
       expect(searched_with).to eq("title_eq" => :hello)
@@ -91,9 +106,9 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
   describe ":if and :unless" do
     let(:filters) do
       {
-        starred_eq: { default: true, if: -> { false } },
-        position_eq: { default: 1, unless: -> { true } },
-        title_eq: { default: "kept", if: -> { true } }
+        starred_eq: { extensions: { default: true }, if: -> { false } },
+        position_eq: { extensions: { default: 1 }, unless: -> { true } },
+        title_eq: { extensions: { default: "kept" }, if: -> { true } }
       }
     end
 
@@ -102,14 +117,14 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
     end
 
     it "accepts a Symbol condition and sends it to the controller" do
-      controller = FakeController.new(filters: { title_eq: { default: "v", if: :never } })
+      controller = FakeController.new(filters: { title_eq: { extensions: { default: "v" }, if: :never } })
       def controller.never = false
       expect(controller.send(:filter_default_values)).to eq({})
     end
   end
 
   describe "#filter_defaults_apply?" do
-    let(:filters) { { starred_eq: { default: true } } }
+    let(:filters) { { starred_eq: { extensions: { default: true } } } }
 
     context "when an override lets defaults through on a partly filtered request" do
       let(:params) { { q: { "customer_id_eq" => "7" } } }
@@ -143,6 +158,40 @@ RSpec.describe ActiveAdminFiltersDefaults::DataAccess do
 
     it "leaves the request alone" do
       expect(searched_with).to eq({})
+    end
+  end
+
+  describe "a required filter's Proc default" do
+    it "is evaluated once per request, shared with the required grouping" do
+      calls = 0
+      controller = FakeController.new(
+        filters: { status_eq: { extensions: { default: -> { calls += 1; "published" }, required: true } } }
+      )
+
+      controller.send(:filtering_params)
+
+      expect(calls).to eq(1)
+    end
+  end
+
+  describe "a policy on a filter whose search key cannot be derived" do
+    # The derivation needs a resource Ransack can search; a proxy page backed by an HTTP API
+    # has none, and a policy must not turn every index of such a page into a 500. The declared
+    # filter name IS the submitted key on those pages, so the guard falls back to it.
+    let(:proxy_controller_class) do
+      Class.new(FakeController) do
+        def filter_search_keys(_attribute, _options)
+          raise ArgumentError, "could not work out which search key it submits"
+        end
+      end
+    end
+    let(:controller) { proxy_controller_class.new(params: params, filters: filters) }
+    let(:filters) { { time_start_gteq: { extensions: { sanitize: ->(v) { v.strip }, default: "keep" } } } }
+    let(:params) { { q: { "time_start_gteq" => "  2026-01-01  " } } }
+
+    it "falls back to the attribute name and still enforces" do
+      controller.send(:enforce_filter_value_policies)
+      expect(controller.params[:q]["time_start_gteq"]).to eq("2026-01-01")
     end
   end
 end

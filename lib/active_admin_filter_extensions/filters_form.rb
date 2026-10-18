@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ActiveAdminFiltersDefaults
+module ActiveAdminFilterExtensions
   # The filters sidebar hands the form the filters that `:if` and `:unless` allow, so the same
   # set is rendered and consulted for defaults, and the conditions are resolved once.
   module ResourceExtension
@@ -17,13 +17,15 @@ module ActiveAdminFiltersDefaults
   end
 
   # The form renders what it is handed: `:if` and `:unless` were already resolved by
-  # #visible_filters, and `:default` is not Formtastic's business.
+  # #visible_filters, and the policy keys - merged flat into these options by
+  # #merge_filter_extensions - are not Formtastic's business. required: in particular is also a
+  # Formtastic option: leaked, it would mark the sidebar input HTML-required.
   #
   # The options are cleaned before `super` sees them rather than editing the loop inside the
   # method, so that this gem carries no copy of a method body that belongs to Active Admin.
   module ViewHelper
     def active_admin_filters_form_for(search, filters, options = {})
-      super(search, filters.transform_values { |opts| opts.except(*FilterDefaults::NOT_FOR_INPUT) }, options)
+      super(search, filters.transform_values { |opts| opts.except(*FilterOptions::NOT_FOR_INPUT, *FilterOptions::EXTENSION_KEYS) }, options)
     end
   end
 

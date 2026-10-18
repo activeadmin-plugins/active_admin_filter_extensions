@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "rack/utils"
 
 # The sample app registers Post once per filter input type - see spec/support/rails_template.rb.
 # Every default below selects `keep me` and rejects `drop me`, so one pair of records exercises
-# all of them.
+# all of them. Capybara follows the one canonicalizing redirect, so every example asserts the
+# final page.
 RSpec.describe "Filter default values", type: :feature do
   before do
     AdminUser.create!(email: "admin@example.com", default_status: "published")
@@ -17,7 +19,7 @@ RSpec.describe "Filter default values", type: :feature do
 
   describe "every filter input type" do
     {
-      "string, predicate in the Hash key" => "/admin/posts",
+      "string, predicate in the Hash key" => "/admin/string_posts",
       "string, predicate already in the filter name" => "/admin/scalar_posts",
       "numeric" => "/admin/numeric_posts",
       "date range" => "/admin/date_posts",
@@ -57,7 +59,7 @@ RSpec.describe "Filter default values", type: :feature do
   # its value differently and a default that filters invisibly is the thing to avoid.
   describe "the value the admin sees in the form" do
     it "shows it on a string filter" do
-      visit "/admin/posts"
+      visit "/admin/string_posts"
 
       expect(page).to have_field("q[title_cont]", with: "keep")
     end
@@ -107,7 +109,7 @@ RSpec.describe "Filter default values", type: :feature do
     end
 
     it "shows everything once the field is blanked and the form submitted" do
-      visit "/admin/posts"
+      visit "/admin/string_posts"
       fill_in "q[title_cont]", with: ""
       click_button "Filter"
 
@@ -169,23 +171,23 @@ RSpec.describe "Filter default values", type: :feature do
 
   describe "default_filters_notice" do
     it "tells the admin why the list is cut down" do
-      visit "/admin/notice_posts"
+      visit "/admin/colliding_notice_posts"
 
-      expect(page).to have_content("Showing the kept ones by default")
+      expect(page).to have_content("Showing published posts by default")
     end
 
     it "stays quiet once the admin has filtered for themselves" do
-      visit "/admin/notice_posts"
-      fill_in "q[title_cont]", with: "drop"
+      visit "/admin/colliding_notice_posts"
+      select "draft", from: "q[status_eq]"
       click_button "Filter"
 
-      expect(page).to have_no_content("Showing the kept ones by default")
+      expect(page).to have_no_content("Showing published posts by default")
     end
   end
 
   describe "requests that carry no q of their own" do
     it "keeps the default while paging" do
-      visit "/admin/posts?page=1"
+      visit "/admin/string_posts?page=1"
 
       expect(page).to have_no_content("drop me")
     end
@@ -193,7 +195,7 @@ RSpec.describe "Filter default values", type: :feature do
     # The download link is built from params, which carry no `q` while the index is showing its
     # declared defaults, so the CSV request has to derive them again to match the screen.
     it "exports the filtered collection to CSV, not the whole table" do
-      visit "/admin/posts"
+      visit "/admin/string_posts"
       click_link "CSV"
 
       expect(page.body).to include("keep me")
@@ -205,7 +207,7 @@ RSpec.describe "Filter default values", type: :feature do
   # state a first visit is in, so it returns the page to its declared defaults rather than to an
   # empty filter set.
   it "returns to the defaults after Clear Filters", :js do
-    visit "/admin/posts"
+    visit "/admin/string_posts"
     fill_in "q[title_cont]", with: ""
     click_button "Filter"
     expect(page).to have_content("drop me")
@@ -215,4 +217,5 @@ RSpec.describe "Filter default values", type: :feature do
     expect(page).to have_content("keep me")
     expect(page).to have_no_content("drop me")
   end
+
 end

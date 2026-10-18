@@ -5,8 +5,12 @@ require "active_support/core_ext/hash/indifferent_access"
 require "active_support/hash_with_indifferent_access"
 # Pure Ruby, no Active Admin boot required - `visible_filters` resolves `:if` / `:unless` with it.
 require "active_admin/view_helpers/method_or_proc_helper"
-require "active_admin_filters_defaults/data_access"
-require "active_admin_filters_defaults/filter_defaults"
+require "active_admin_filter_extensions/data_access"
+require "active_admin_filter_extensions/filter_options"
+require "active_admin_filter_extensions/search_keys"
+require "active_admin_filter_extensions/required_filters"
+require "active_admin_filter_extensions/filter_defaults"
+require "active_admin_filter_extensions/policies"
 
 # `DataAccess` only needs `params`, `active_admin_config` and something that answers `ransack`.
 # That lets the unit suite run without booting Active Admin or Rails; the integration suite in
@@ -25,7 +29,13 @@ class FakeChain
 end
 
 class FakeController
-  Config = Struct.new(:filters)
+  # The resource settings the policy layer reads unconditionally in a real install.
+  Config = Struct.new(:filters) do
+    def require_any_filter_notice = nil
+  end
+
+  def self.before_action(*); end # the guard registers one; FakeController has no chain
+  def performed? = false
 
   attr_reader :params, :active_admin_config
 
@@ -43,8 +53,12 @@ class FakeController
     @search_keys.fetch(attribute) { [attribute.to_s] }
   end
 
-  prepend ActiveAdminFiltersDefaults::DataAccess
-  include ActiveAdminFiltersDefaults::FilterDefaults
+  prepend ActiveAdminFilterExtensions::DataAccess
+  include ActiveAdminFilterExtensions::Policies::Controller
+  include ActiveAdminFilterExtensions::FilterOptions
+  include ActiveAdminFilterExtensions::SearchKeys
+  include ActiveAdminFilterExtensions::RequiredFilters
+  include ActiveAdminFilterExtensions::FilterDefaults
 end
 
 RSpec.configure do |config|

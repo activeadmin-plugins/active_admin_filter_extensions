@@ -16,5 +16,12 @@ task :setup do
     -m spec/support/rails_template.rb
   ].join(" ")
 
-  system "bundle exec rails new spec/rails/rails-#{Rails::VERSION::STRING} #{args}"
+  app_dir = "spec/rails/rails-#{Rails::VERSION::STRING}"
+  sh "bundle exec rails new #{app_dir} #{args}"
+
+  # Stamped so rails_helper can refuse an app generated from an older template instead of
+  # silently testing against resources the template no longer declares.
+  require "digest"
+  File.write(File.join(app_dir, ".rails_template_digest"),
+             Digest::SHA256.file("spec/support/rails_template.rb").hexdigest)
 end

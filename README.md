@@ -1,4 +1,4 @@
-# active_admin_filters_defaults
+# active_admin_filter_extensions
 
 Default values for Active Admin index filters.
 
@@ -6,18 +6,21 @@ Some index pages are not "a list you may want to narrow down", they are "a list 
 meaningful, or only affordable, inside a window": a log table partitioned by date, a page backed
 by an external service that will not answer an unbounded query, a queue an agent should land on.
 Active Admin has no way to say so, so every app of this size grows a `before_action` that mutates
-`params[:q]`. This is that, as an option on the filter itself.
+`params[:q]`. This is that, as an option on the filter itself - and a URL that means the page:
+a bare HTML visit to the index answers with one redirect to itself, the effective filters
+spelled out in the query string, so the address the admin copies shows the same page to
+whoever opens it.
 
 ```ruby
 ActiveAdmin.register Order do
-  filter :state_eq, as: :select, collection: %w[pending paid], default: "pending"
+  filter :state_eq, as: :select, collection: %w[pending paid], extensions: { default: "pending" }
 end
 ```
 
 ## Install
 
 ```ruby
-gem "active_admin_filters_defaults", github: "activeadmin-plugins/active_admin_filters_defaults"
+gem "active_admin_filter_extensions", github: "activeadmin-plugins/active_admin_filter_extensions"
 ```
 
 Pre-1.0 and not on RubyGems yet: the option name and the shape of its value may still change.
@@ -30,11 +33,11 @@ primary key, and a `:string` gets whichever predicate heads its dropdown, includ
 resource or the namespace has reordered that list:
 
 ```ruby
-filter :status,     as: :select,      default: "active"
-filter :author,     as: :check_boxes, default: [1, 2]
-filter :created_at, as: :date_range,  default: -> { 1.week.ago..Time.current }
-filter :created_at, as: :date_range,  default: -> { 1.week.ago.. }       # lower bound only
-filter :title,                        default: "acme"
+filter :status,     as: :select,      extensions: { default: "active" }
+filter :author,     as: :check_boxes, extensions: { default: [1, 2] }
+filter :created_at, as: :date_range,  extensions: { default: -> { 1.week.ago..Time.current } }
+filter :created_at, as: :date_range,  extensions: { default: -> { 1.week.ago.. } }  # lower bound only
+filter :title,                        extensions: { default: "acme" }
 ```
 
 **A Range** fills a two-ended input, one bound per end; leave an end off and that end is left to
@@ -49,8 +52,8 @@ is re-read on every request.
 filter, which is how a default is made conditional or read off the signed-in admin:
 
 ```ruby
-filter :author_id_eq, default: -> { current_admin_user.id unless current_admin_user.admin? }
-filter :queue_eq,     default: -> { current_admin_user.default_queue }
+filter :author_id_eq, extensions: { default: -> { current_admin_user.id unless current_admin_user.admin? } }
+filter :queue_eq,     extensions: { default: -> { current_admin_user.default_queue } }
 ```
 
 Asking the input means you get whatever that input actually submits, which is not always the
@@ -71,8 +74,8 @@ raises rather than guessing:
 is not the one you want:
 
 ```ruby
-filter :title, default: { eq: "acme" }                 # rather than the _cont it would submit
-filter :created_at, as: :date_range, default: { gteq: -> { 1.week.ago } }
+filter :title, extensions: { default: { eq: "acme" } }     # rather than the _cont it would submit
+filter :created_at, as: :date_range, extensions: { default: { gteq: -> { 1.week.ago } } }
 ```
 
 A filter hidden by `:if` or `:unless` imposes no default either — it would filter the collection
@@ -107,41 +110,185 @@ Whatever the request asked for wins over a default, so the pinned value survives
 
 ## Telling the admin why
 
-An index that quietly shows a slice of the table owes the admin a word about it. That part is
-optional and is not installed on its own, since Active Admin has no notion of a flash about
-filters:
+An index that quietly shows a slice of the table owes the admin a word about it:
 
 ```ruby
-# config/initializers/active_admin.rb
-require "active_admin_filters_defaults/notice"
-
 ActiveAdmin.register Export do
   default_filters_notice "Records for the last month are displayed by default"
-  filter :created_at, as: :date_range, default: { gteq: -> { 1.month.ago } }
+  filter :created_at, as: :date_range, extensions: { default: { gteq: -> { 1.month.ago } } }
 end
 ```
 
 The message is flashed only when the defaults actually took effect. Pass `flash_key:` to use
 something other than `:notice`.
 
-## How it works
+## Required filters: the mandatory window
 
-Four `prepend`s, no source patching:
+Some tables must never be queried without a bound - a log partitioned by date, a CDR table
+where an unbounded scan is an outage. `required: true` promotes the filter's default from
+"applies to a bare request" to "applies whenever THIS filter's keys are absent", whatever
+else the request carries - and a blank filters-form submission gets the window back rather
+than the whole table:
 
-* `ActiveAdmin::ResourceController` — `apply_filtering` searches on `filtering_params`, a new
-  overridable method, instead of reading `params[:q]` directly. `params` itself is never written
-  to: the filter inputs read their value from the Ransack object, and the defaults are derived
-  again on every request that carries no `q`, so paging, sorting and download links keep them.
-* `ActiveAdmin::Resource` — the filters sidebar is handed the filters that `:if` and `:unless`
-  allow, so the same set is rendered and consulted for defaults, and the conditions are resolved
-  once rather than once per side.
-* `ActiveAdmin::Filters::ViewHelper` — the form renders what it is given, and `:default` is taken
-  out of the options before Formtastic sees them.
-* `ActiveAdmin::Filters::ActiveSidebar` — the Current Filters panel was gated on `params[:q]`,
-  which stays empty when the values came from `default:`, so it now also shows for those.
+```ruby
+filter :time_start, as: :date_time_range,
+       extensions: { required: { unless: %i[id_eq uuid_eq] },  # a search naming one record escapes it
+                 default:  -> { 1.day.ago.beginning_of_day..Date.tomorrow.end_of_day } }
+```
 
-`default:` needs no registration of its own: `add_filter` stores whatever options it is given,
-without a whitelist.
+`required: true` is unconditional. A Hash narrows it: `{ unless: keys }` excuses the window
+beside those keys, `{ if: keys }` imposes it only beside those keys; both take a Symbol or an
+Array and combine.
+
+The required window is group-wide: a request that touched ANY of the filter's own keys has
+answered it - an upper bound alone is honored as given, never completed from the default
+into a pair the admin did not mean. What a half-open range may not mean is `max_range:`'s
+business. `required:` without a `default:` raises on the first index request: mandatory with nothing
+to fall back on is a configuration error, not a quiet empty page. The defaults notice
+speaks whenever a default actually reached the search - including onto a partly-filtered
+request.
+
+## What the policies do and do not guard
+
+A value policy watches every request key that names its filter's attribute - the derived
+head key and the sibling predicates a dropdown submits (`position_gt` beside a policed
+`position_eq`). The deliberate boundaries:
+
+* **Window, required and with: groups watch their derived and named keys** - not arbitrary
+  predicates of other attributes. Policies are guard rails for the UI the filter renders -
+  for hostile-proof filtering, whitelist at the model
+  (`ransackable_attributes`/`ransackable_scopes`), which is also where Ransack itself draws
+  the trust line.
+* **A policed key refuses non-string shapes.** `?q[title_cont][value]=x` executes
+  byte-identically to the scalar, so a Hash- or Array-wrapped value on a policed key is
+  treated as a violation, not ignored.
+* **A `required:` filter whose Proc default resolves to nil imposes nothing for that
+  request.** That is how a per-admin default opts out ("no COMMERCIAL narrowing for this
+  admin"); for a window that must never be absent, return a window from every branch of the
+  Proc.
+* **`sanitize:` must be idempotent** - sanitizing its own output must change nothing. In the
+  redirect the sanitized value comes back in the URL for another pass; a sanitizer
+  that keeps rewriting is an infinite redirect, and the gem raises on the first request
+  instead of looping.
+
+## Filters that only make sense together
+
+```ruby
+filter :month, as: :select, collection: 1..12,
+       extensions: { default: -> { Date.current.month }, with: :year_eq }
+```
+
+A filter declared `with:` its partner key(s) - a Symbol or an Array - forms one group out of
+its own search keys and the partners: either every key of the group is answered or none. A
+half-answered group is reset to the declared defaults with a warning, whichever side the half
+came from. Declare it on either member; mirrored declarations dedupe to the one group they
+both name.
+
+## Resource-level guard
+
+```ruby
+require_any_filter notice: "You must specify at least one filter"
+```
+
+`require_any_filter` makes an index answer no question until it is asked one: a bare visit -
+a blank form submission included - renders an empty collection with the notice, never the
+whole table. Resource-level on purpose: "any filter at all" belongs to no single filter.
+
+## on_invalid: what a violated policy does
+
+Three named consequences, because the inventoried apps genuinely used them:
+
+```ruby
+filter :time_start, ..., extensions: { max_range: 90.days }         # :reset is the default
+filter :customer_id, extensions: { validate: ->(v) { :invalid unless v.match?(/\A\d+\z/) }, on_invalid: :reject }
+filter :name_eq, extensions: { validate: ->(v) { ... }, on_invalid: :empty }
+```
+
+* `:reset` - drop the offending key(s), `flash[:error]`, the declared `default:` refills.
+* `:reject` - `flash[:error]` and bounce back the way the request came (bare index when
+  there is no referer).
+* `:empty` - render an empty collection with the message, keeping the admin's input in the
+  form: "nothing found because the value is malformed" stops masquerading as an honestly
+  empty result.
+
+The URL always ends up telling the truth: the redirect compares the
+search that will actually run against the query string as the browser sent it, so a value a
+policy rewrote (sanitize) or dropped redirects once to the corrected address.
+
+## Window policies: max_range and min
+
+The range caps and retention floors, declared where the window is:
+
+```ruby
+filter :time_start, as: :date_time_range,
+       extensions: { required:  true,
+                 default:   -> { 1.day.ago.beginning_of_day..Date.tomorrow.end_of_day },
+                 max_range: 90.days,
+                 min:       -> { 2.months.ago } }
+```
+
+A violation - unparseable bound, inverted range, wider than `max_range:`, earlier than
+`min:` - resets the PAIR: both bounds dropped, one `flash[:error]`, the declared default
+refills. An open upper bound is measured against now; a FUTURE lower bound with no upper
+bound selects a not-yet-written window and passes. A default that would itself violate the
+policy raises on first use - resetting into a refused window is a loop, not a fallback.
+Messages are i18n keys under `active_admin_filter_extensions.*` (`range_invalid`,
+`range_too_wide` with `%{limit}`, `before_floor` with `%{floor}`), shipped with English
+defaults.
+
+## Value policies: sanitize and validate
+
+The guards every app of this size hand-rolls in index before_actions - strip what typing
+drags in, refuse what the search cannot mean - as options on the filter itself:
+
+```ruby
+filter :ip_contains, as: :string,
+       extensions: { sanitize: ->(value) { value.sub(%r{/+\z}, "") },
+                 validate: :ip }                  # built-in; or a callable
+
+filter :title_cont, as: :string,
+       extensions: { default:  "acme",
+                 validate: ->(value) { "Title must not contain digits." if value.match?(/\d/) } }
+
+filter :id_eq, as: :string,
+       extensions: { sanitize: :digits,               # built-in: strip to digits
+                 validate: :integer }             # built-in: must fit a PG int4
+```
+
+`sanitize:` rewrites the value in place before anything reads it - including the redirect
+decision, so the URL carries what was actually searched.
+`validate:` answers nil for a good value, or a message: a String used verbatim, or a Symbol
+looked up under the `active_admin_filter_extensions.*` i18n scope with `%{filter}` available.
+
+On a violation the policy is `:reset`: the offending key is dropped from `q`, the message
+lands in `flash[:error]` (and rides the redirect), and the filter's declared `default:` - if
+any - refills through the ordinary merge. The defaults notice stays quiet on that render:
+the error already explains why the page shows the default slice.
+
+## The redirect
+
+A bare visit to the index redirects once to itself with the effective filters spelled out in
+the query string. A relative default is frozen to the dates it came to, a per-admin default
+to the values this admin saw - so the address the admin copies shows the same page to whoever
+opens it, instead of re-resolving the defaults against the recipient's clock and account. A
+declared `default_filters_notice` rides the redirect. The price: +1 redirect on every bare
+visit, and a bookmarked URL pins the defaults of the day it was made rather than following
+the code. Non-HTML requests (CSV, JSON) are never redirected; the defaults filter them all
+the same.
+
+Three prints in small type:
+
+* **Code that rewrites `q` in a `before_action`** (sanitizers that delete invalid ranges,
+  say) runs after the redirect has already compared the request against the defaults - the
+  URL then keeps saying what the sanitizer removed. Rewrite `q` before the gem sees it, or
+  declare the rule as a `sanitize:`/`validate:` extension and let the redirect carry the
+  corrected value.
+* **The redirect runs after authentication but before Active Admin's index authorization**,
+  so an authenticated admin without read rights on a resource still receives the 302 whose
+  Location spells out that resource's defaults. Keep per-role secrets out of defaults.
+* **Anything that reads `params[:q]` for the effective filters** (drill-down links, exports)
+  should read `filtering_params` instead - on the rendered page they agree, but only
+  `filtering_params` is also right on the non-redirected formats.
 
 Tested against Active Admin 3.5 on Rails 8.0 and 8.1, under Ruby 3.3, 3.4 and 4.0.
 
