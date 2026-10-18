@@ -1,18 +1,18 @@
 # frozen_string_literal: true
 
-require "active_admin_filters_defaults"
+require "active_admin_filter_extensions"
 
-module ActiveAdminFiltersDefaults
-  # Optional, and deliberately not part of what `active_admin_filters_defaults` installs on its
-  # own: Active Admin has no notion of a flash about filters, and this is presentation rather
-  # than filtering. Require it explicitly to switch it on.
+module ActiveAdminFilterExtensions
+  # Optional, and deliberately not part of what `active_admin_filter_extensions` installs on
+  # its own: Active Admin has no notion of a flash about filters, and this is presentation
+  # rather than filtering. Require it explicitly to switch it on.
   #
   #   # config/initializers/active_admin.rb
-  #   require "active_admin_filters_defaults/notice"
+  #   require "active_admin_filter_extensions/notice"
   #
   #   ActiveAdmin.register Export do
   #     default_filters_notice "Records for the last month are displayed by default"
-  #     filter :created_at, as: :date_range, default: { gteq: -> { 1.month.ago } }
+  #     filter :created_at, as: :date_range, extensions: { default: { gteq: -> { 1.month.ago } } }
   #   end
   #
   # An index that quietly shows a slice of the table owes the admin a word about why. The
@@ -34,5 +34,5 @@ module ActiveAdminFiltersDefaults
 end
 
 ActiveAdmin.before_load do |_app|
-  ActiveAdmin::ResourceDSL.include ActiveAdminFiltersDefaults::Notice
+  ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Notice
 end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ActiveAdminFiltersDefaults
+module ActiveAdminFilterExtensions
   # Everything `filter ..., default:` means: which requests the declared defaults apply to, what
   # they come to on this one, and which Ransack key each value lands under.
   #
@@ -8,12 +8,6 @@ module ActiveAdminFiltersDefaults
   # resource is meant to be able to override the seams here in its own `controller do` block.
   # The one method that does replace Active Admin's is in DataAccess.
   module FilterDefaults
-    # Read here and never handed to an input: `:default` is this gem's, and `:if` / `:unless`
-    # are Active Admin's but are resolved by #visible_filters before the form is given
-    # anything. Named once, because both the form and the derivation have to strip the same
-    # set and an option that drifts between them reaches Formtastic silently.
-    NOT_FOR_INPUT = %i[default if unless].freeze
-
     protected
 
     # The filter values the collection is searched with. Override to change what the index
@@ -25,13 +19,12 @@ module ActiveAdminFiltersDefaults
     #
     # @return [Hash, ActionController::Parameters] values passed to Ransack
     def filtering_params
-      return params[:q] || {} unless filter_defaults_apply?
+      requested = requested_filtering_params
+      return requested || {} unless filter_defaults_apply?
 
       defaults = filter_default_values
-      return params[:q] || {} if defaults.blank?
+      return requested || {} if defaults.blank?
 
-      requested = params[:q]
-      requested = requested.to_unsafe_h if requested.respond_to?(:to_unsafe_h)
       defaults.merge(requested || {})
     end
 
@@ -51,18 +44,6 @@ module ActiveAdminFiltersDefaults
       params[:q].blank? && params[:commit].blank?
     end
 
-    # The filters of this resource that `:if` and `:unless` allow, which is both the set the
-    # filters form renders and the set that can impose a default - a filter that is not
-    # rendered does not filter the collection behind the admin's back.
-    #
-    # @return [Hash] filter attribute => filter options
-    def visible_filters
-      @visible_filters ||= active_admin_config.filters.reject do |_attribute, options|
-        (options.key?(:if) && !::MethodOrProcHelper.render_in_context(self, options[:if])) ||
-          (options.key?(:unless) && ::MethodOrProcHelper.render_in_context(self, options[:unless]))
-      end
-    end
-
     # @return [Hash] the search values declared with `filter ..., default:`
     def filter_default_values
       @filter_default_values ||= visible_filters.each_with_object({}) do |(attribute, options), result|
@@ -73,6 +54,19 @@ module ActiveAdminFiltersDefaults
     end
 
     private
+
+    def requested_filtering_params
+      requested = params[:q]
+      requested = requested.to_unsafe_h if requested.respond_to?(:to_unsafe_h)
+      # `?q=` parses to an empty String - blank, so the defaults apply, but not a Hash, so it
+      # must not reach the merge. Anything else non-Hash is junk Ransack would ignore anyway.
+      return nil unless requested.is_a?(Hash)
+
+      # A blank value is no answer: Ransack strips it before searching, so letting it clobber
+      # a default in the merge - or count as "this key was answered" for a required: window -
+      # turns ?q[k]= into a full-table scan wearing an answered-looking URL.
+      requested.reject { |_, value| value.blank? && value != false }
+    end
 
     # A default is a value, and where that value goes is the input's business - see SearchKeys.
     #
@@ -120,61 +114,5 @@ module ActiveAdminFiltersDefaults
       end
     end
 
-    # Asked against an empty search on purpose: `current_filter` otherwise answers with whatever
-    # predicate the current request happens to carry, and a default is about the request that
-    # carries none.
-    #
-    # @return [Array<String>] one key, or two for a range input
-    def filter_search_keys(attribute, options)
-      input = build_filter_input(attribute, options)
-
-      names =
-        if input.respond_to?(:gt_input_name)
-          [input.gt_input_name, input.lt_input_name]
-        elsif input.respond_to?(:current_filter) && !input.seems_searchable?
-          # `:string` and `:numeric` let the admin pick the predicate from a dropdown, and the
-          # head of that list is what an untouched form submits. Unless the filter name already
-          # carries a predicate, in which case there is no dropdown - and asking anyway raises,
-          # since `current_filter` would go looking for `title_eq_cont`.
-          [input.current_filter]
-        else
-          [input.input_name]
-        end
-
-      names.map { |name| name.to_s[/\Aq\[([^\]]+)\]/, 1] || name.to_s }
-    rescue StandardError => e
-      raise_filter_default_error(attribute, "could not work out which search key it submits (#{e.class}: #{e.message}) - name the predicate with a Hash instead")
-    end
-
-    def build_filter_input(attribute, options)
-      builder = filter_input_builder
-      options = filter_input_options(options, builder)
-      as = options[:as] || builder.send(:default_input_type, attribute)
-      builder.send(:namespaced_input_class, as)
-             .new(builder, builder.template, builder.object, :q, attribute, options)
-    end
-
-    # `:input_html` may be a Proc, which the filters form resolves against the view before it
-    # builds the input. Handing the Proc over instead is not merely incomplete, it is wrong in
-    # a way nothing reports: `Proc#[]` is `call`, so Formtastic asking `input_html[:multiple]`
-    # invokes it, gets a truthy Hash back, and a `:select` derives `_in` rather than `_eq`.
-    def filter_input_options(options, builder)
-      options = options.except(*NOT_FOR_INPUT)
-      return options unless options[:input_html].is_a?(Proc)
-
-      options.merge(input_html: builder.template.instance_exec(&options[:input_html]))
-    end
-
-    # One per request rather than one per filter: #view_context builds a fresh view class every
-    # time it is called, and every defaulted filter would pay for another one.
-    def filter_input_builder
-      @filter_input_builder ||= ::ActiveAdmin::Filters::FormBuilder.new(
-        :q, active_admin_config.resource_class.ransack({}), view_context, {}
-      )
-    end
-
-    def raise_filter_default_error(attribute, message)
-      raise ArgumentError, "filter :#{attribute} declares a `default:` but #{message}"
-    end
   end
 end

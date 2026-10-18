@@ -5,8 +5,10 @@ require "active_support/core_ext/hash/indifferent_access"
 require "active_support/hash_with_indifferent_access"
 # Pure Ruby, no Active Admin boot required - `visible_filters` resolves `:if` / `:unless` with it.
 require "active_admin/view_helpers/method_or_proc_helper"
-require "active_admin_filters_defaults/data_access"
-require "active_admin_filters_defaults/filter_defaults"
+require "active_admin_filter_extensions/data_access"
+require "active_admin_filter_extensions/filter_options"
+require "active_admin_filter_extensions/search_keys"
+require "active_admin_filter_extensions/filter_defaults"
 
 # `DataAccess` only needs `params`, `active_admin_config` and something that answers `ransack`.
 # That lets the unit suite run without booting Active Admin or Rails; the integration suite in
@@ -43,8 +45,10 @@ class FakeController
     @search_keys.fetch(attribute) { [attribute.to_s] }
   end
 
-  prepend ActiveAdminFiltersDefaults::DataAccess
-  include ActiveAdminFiltersDefaults::FilterDefaults
+  prepend ActiveAdminFilterExtensions::DataAccess
+  include ActiveAdminFilterExtensions::FilterOptions
+  include ActiveAdminFilterExtensions::SearchKeys
+  include ActiveAdminFilterExtensions::FilterDefaults
 end
 
 RSpec.configure do |config|

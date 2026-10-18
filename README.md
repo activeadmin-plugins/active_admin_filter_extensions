@@ -1,4 +1,4 @@
-# active_admin_filters_defaults
+# active_admin_filter_extensions
 
 Default values for Active Admin index filters.
 
@@ -10,14 +10,14 @@ Active Admin has no way to say so, so every app of this size grows a `before_act
 
 ```ruby
 ActiveAdmin.register Order do
-  filter :state_eq, as: :select, collection: %w[pending paid], default: "pending"
+  filter :state_eq, as: :select, collection: %w[pending paid], extensions: { default: "pending" }
 end
 ```
 
 ## Install
 
 ```ruby
-gem "active_admin_filters_defaults", github: "activeadmin-plugins/active_admin_filters_defaults"
+gem "active_admin_filter_extensions", github: "activeadmin-plugins/active_admin_filter_extensions"
 ```
 
 Pre-1.0 and not on RubyGems yet: the option name and the shape of its value may still change.
@@ -30,11 +30,11 @@ primary key, and a `:string` gets whichever predicate heads its dropdown, includ
 resource or the namespace has reordered that list:
 
 ```ruby
-filter :status,     as: :select,      default: "active"
-filter :author,     as: :check_boxes, default: [1, 2]
-filter :created_at, as: :date_range,  default: -> { 1.week.ago..Time.current }
-filter :created_at, as: :date_range,  default: -> { 1.week.ago.. }       # lower bound only
-filter :title,                        default: "acme"
+filter :status,     as: :select,      extensions: { default: "active" }
+filter :author,     as: :check_boxes, extensions: { default: [1, 2] }
+filter :created_at, as: :date_range,  extensions: { default: -> { 1.week.ago..Time.current } }
+filter :created_at, as: :date_range,  extensions: { default: -> { 1.week.ago.. } }  # lower bound only
+filter :title,                        extensions: { default: "acme" }
 ```
 
 **A Range** fills a two-ended input, one bound per end; leave an end off and that end is left to
@@ -49,8 +49,8 @@ is re-read on every request.
 filter, which is how a default is made conditional or read off the signed-in admin:
 
 ```ruby
-filter :author_id_eq, default: -> { current_admin_user.id unless current_admin_user.admin? }
-filter :queue_eq,     default: -> { current_admin_user.default_queue }
+filter :author_id_eq, extensions: { default: -> { current_admin_user.id unless current_admin_user.admin? } }
+filter :queue_eq,     extensions: { default: -> { current_admin_user.default_queue } }
 ```
 
 Asking the input means you get whatever that input actually submits, which is not always the
@@ -71,8 +71,8 @@ raises rather than guessing:
 is not the one you want:
 
 ```ruby
-filter :title, default: { eq: "acme" }                 # rather than the _cont it would submit
-filter :created_at, as: :date_range, default: { gteq: -> { 1.week.ago } }
+filter :title, extensions: { default: { eq: "acme" } }     # rather than the _cont it would submit
+filter :created_at, as: :date_range, extensions: { default: { gteq: -> { 1.week.ago } } }
 ```
 
 A filter hidden by `:if` or `:unless` imposes no default either — it would filter the collection
@@ -113,7 +113,7 @@ filters:
 
 ```ruby
 # config/initializers/active_admin.rb
-require "active_admin_filters_defaults/notice"
+require "active_admin_filter_extensions/notice"
 
 ActiveAdmin.register Export do
   default_filters_notice "Records for the last month are displayed by default"

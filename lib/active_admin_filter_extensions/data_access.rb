@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ActiveAdminFiltersDefaults
+module ActiveAdminFilterExtensions
   # The single method this gem replaces: Active Admin searches the collection on `params[:q]`
   # read directly, and it searches #filtering_params instead. Everything that method means is
   # in FilterDefaults.
