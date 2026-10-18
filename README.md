@@ -90,6 +90,8 @@ filter :title,                        extensions: { default: "acme" }
 
 **A Range** fills a two-ended input, one bound per end; leave an end off and that end is left to
 the admin. Handing a single value to a two-ended input raises, rather than picking an end for you.
+So does an exclusive range (`a...b`): the input submits `gteq` and `lteq`, so the excluded end has
+no spelling there and would be searched after all.
 
 Anything relative to now belongs in a Proc, as above. `filter` runs when the resource file is
 loaded, so `default: 1.week.ago..` would pin the window to the moment the process booted and let

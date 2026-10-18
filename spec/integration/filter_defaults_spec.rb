@@ -52,6 +52,14 @@ RSpec.describe "Filter default values", type: :feature do
       expect { visit "/admin/ambiguous_posts" }
         .to raise_error(ArgumentError, /filter :published_date declares a `default:`.*single value cannot say which to fill/m)
     end
+
+    it "says so for an exclusive Range instead of widening it" do
+      # The inputs submit gteq and lteq, so an excluded end has no spelling: stored as lteq it
+      # searched the day the Range left out, and the redirect froze that bound into every
+      # copied URL. Every other Range ambiguity here raises; this one changed data quietly.
+      expect { visit "/admin/banana_exclusive_range_posts" }
+        .to raise_error(ArgumentError, /exclusive Range.*use an inclusive range/m)
+    end
   end
 
   # Filtering the collection is only half of it: the admin has to be able to see what the page

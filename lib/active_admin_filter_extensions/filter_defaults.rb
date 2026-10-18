@@ -295,6 +295,13 @@ module ActiveAdminFilterExtensions
           raise_filter_default_error(attribute, "a Range needs an input with two ends, and this one submits #{names.join(' and ')}")
         end
 
+        # The input submits gteq and lteq, so an excluded end has no spelling here: stored as
+        # lteq it would search the very bound the Range left out, quietly and in every copied
+        # URL. An endless exclusive Range has no end to exclude and is fine.
+        if default.exclude_end? && !default.end.nil?
+          raise_filter_default_error(attribute, "an exclusive Range has no gteq/lteq spelling, so its end would be searched after all - use an inclusive range, or name the predicates with a Hash")
+        end
+
         result[names.first] = default.begin unless default.begin.nil?
         result[names.last] = default.end unless default.end.nil?
       else

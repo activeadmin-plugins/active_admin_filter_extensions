@@ -131,6 +131,13 @@ file "app/admin/posts.rb", <<~RUBY
       filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1) }
     end
 
+    ActiveAdmin.register Post, as: "BananaExclusiveRangePost" do
+      # The excluded end has no gteq/lteq spelling - the suite proves that raises instead of
+      # searching the day the Range left out.
+      filter :published_date, as: :date_range,
+                              extensions: { default: -> { Date.new(2026, 1, 1)...Date.new(2026, 2, 1) } }
+    end
+
     ActiveAdmin.register Post, as: "ProcInputHtmlPost" do
       filter :status, as: :select, collection: %w[draft published],
                       input_html: proc { { class: "select2" } }, extensions: { default: "published" }
