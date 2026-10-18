@@ -121,7 +121,7 @@ module ActiveAdminFilterExtensions
 
           next unless options.values_at(:sanitize, :validate, :max_range, :min).any?
 
-          keys = filter_search_keys(attribute, options)
+          keys = policy_search_keys(attribute, options)
           enforce_scalar_policies(q, attribute, options, keys | sibling_predicate_keys(q, keys))
           enforce_window_policies(q, attribute, options, keys)
         end
@@ -146,7 +146,7 @@ module ActiveAdminFilterExtensions
       # when a declared filter submits it as-is (scope-named filters carry no predicate), or
       # when it carries a real predicate on a declared filter's attribute.
       def any_declared_filter_answered?
-        exact = visible_filters.flat_map { |attribute, options| filter_search_keys(attribute, options) }
+        exact = visible_filters.flat_map { |attribute, options| policy_search_keys(attribute, options) }
         bases = exact.map { |key| strip_ransack_predicate(key) }
 
         filtering_params.any? do |key, value|
@@ -183,7 +183,7 @@ module ActiveAdminFilterExtensions
           partners = options[:with]
           next unless partners
 
-          (filter_search_keys(attribute, options) + Array(partners).map(&:to_s)).uniq.sort
+          (policy_search_keys(attribute, options) + Array(partners).map(&:to_s)).uniq.sort
         end.uniq
 
         # Overlapping groups are one question: resetting half of one must not orphan the
@@ -209,6 +209,15 @@ module ActiveAdminFilterExtensions
         name = name.to_s.dup
         ::Ransack::Predicate.detect_and_strip_from_string!(name)
         name
+      end
+
+      # Deriving a key needs a resource Ransack can search; a proxy page backed by an HTTP API
+      # has none, and a policy must not turn its every index into a 500. On such pages the
+      # declared filter name IS the submitted key, so fall back to it.
+      def policy_search_keys(attribute, options)
+        filter_search_keys(attribute, options)
+      rescue ArgumentError
+        [attribute.to_s]
       end
 
       def enforce_scalar_policies(q, attribute, options, keys)

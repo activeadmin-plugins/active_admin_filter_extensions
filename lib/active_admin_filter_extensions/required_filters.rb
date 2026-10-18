@@ -23,7 +23,7 @@ module ActiveAdminFilterExtensions
         # Answered by ANY of the filter's own submitted keys, not only the ones its default
         # happens to fill: an endless default must not inject a lower bound beside an
         # upper-only request.
-        result[attribute] = { defaults: group, keys: filter_search_keys(attribute, options) }
+        result[attribute] = { defaults: group, keys: policy_search_keys(attribute, options) }
                             .merge(required_conditions(attribute, options))
       end
     end

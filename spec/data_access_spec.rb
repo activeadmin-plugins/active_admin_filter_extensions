@@ -174,4 +174,24 @@ RSpec.describe ActiveAdminFilterExtensions::DataAccess do
     end
   end
 
+  describe "a policy on a filter whose search key cannot be derived" do
+    # The derivation needs a resource Ransack can search; a proxy page backed by an HTTP API
+    # has none, and a policy must not turn every index of such a page into a 500. The declared
+    # filter name IS the submitted key on those pages, so the guard falls back to it.
+    let(:proxy_controller_class) do
+      Class.new(FakeController) do
+        def filter_search_keys(_attribute, _options)
+          raise ArgumentError, "could not work out which search key it submits"
+        end
+      end
+    end
+    let(:controller) { proxy_controller_class.new(params: params, filters: filters) }
+    let(:filters) { { time_start_gteq: { extensions: { sanitize: ->(v) { v.strip }, default: "keep" } } } }
+    let(:params) { { q: { "time_start_gteq" => "  2026-01-01  " } } }
+
+    it "falls back to the attribute name and still enforces" do
+      controller.send(:enforce_filter_value_policies)
+      expect(controller.params[:q]["time_start_gteq"]).to eq("2026-01-01")
+    end
+  end
 end
