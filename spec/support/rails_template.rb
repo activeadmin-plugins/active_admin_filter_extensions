@@ -464,6 +464,20 @@ file "app/admin/posts.rb", <<~RUBY
       filter :starred
     end
 
+    ActiveAdmin.register Post, as: "SplitPairPost" do
+      # Two single-ended filters on ONE attribute, linked by with:. Grouped by stripped
+      # attribute they look like one two-ended input, so half an answer passed as a whole group.
+      filter :position_gteq, as: :string, extensions: { with: :position_lteq }
+      filter :position_lteq, as: :string
+    end
+
+    ActiveAdmin.register Post, as: "BananaSplitPairPost" do
+      # Only one half of a split pair declares a default - the fallback would run the very
+      # half-group the enforcement refuses. The suite proves that raises.
+      filter :position_gteq, as: :string, extensions: { default: "10", with: :position_lteq }
+      filter :position_lteq, as: :string
+    end
+
     ActiveAdmin.register Post, as: "PairedDatePost" do
       # Declared on ONE member - the partner's side must trip the same group - and on a
       # two-ended filter, whose predicates the warning must still humanize away.

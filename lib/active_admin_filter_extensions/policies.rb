@@ -190,8 +190,25 @@ module ActiveAdminFilterExtensions
       # A group's members, not its keys: a two-ended filter submits two of them and is answered
       # by either bound - the touched-is-answered rule required: already follows. Counted as
       # separate keys, one bound beside the partner read as a half-answered group.
+      #
+      # Only keys ONE input submits together are combined. Grouping by the stripped attribute
+      # instead would also merge two single-ended filters declared separately on one column
+      # (position_gteq with: position_lteq), and half that answer would pass as a whole group.
       def with_group_members(keys)
-        keys.group_by { |key| strip_ransack_predicate(key) }.values
+        shared = multi_key_filter_keys.filter_map do |input_keys|
+          own = input_keys & keys
+          own if own.size > 1
+        end
+
+        (keys - shared.flatten).map { |key| [key] } + shared
+      end
+
+      # The key sets of filters whose input submits more than one - the two-ended ones.
+      def multi_key_filter_keys
+        @multi_key_filter_keys ||= visible_filters.filter_map do |attribute, options|
+          keys = policy_search_keys(attribute, options)
+          keys if keys.size > 1
+        end
       end
 
       # `with: :year_eq` on a filter: its own search keys and the named partners are one

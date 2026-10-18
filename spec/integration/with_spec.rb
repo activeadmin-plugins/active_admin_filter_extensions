@@ -82,6 +82,29 @@ RSpec.describe "with: filters", type: :feature do
     expect(page).to have_no_content("drop me")
   end
 
+  it "keeps separately declared partners on one attribute distinct" do
+    # Two single-ended filters are two members, not one two-ended input: grouping them by the
+    # stripped attribute made half an answer pass as a whole group.
+    visit "/admin/split_pair_posts?q%5Bposition_gteq%5D=10"
+
+    expect(page).to have_content("must be given together")
+    expect(page).to have_content("keep me")
+    expect(page).to have_content("drop me")
+  end
+
+  it "lets both halves of a split pair through" do
+    visit "/admin/split_pair_posts?q%5Bposition_gteq%5D=10&q%5Bposition_lteq%5D=30"
+
+    expect(page).to have_no_content("must be given together")
+    expect(page).to have_content("keep me")
+    expect(page).to have_no_content("drop me")
+  end
+
+  it "raises when only one half of a split pair declares a default" do
+    expect { visit "/admin/banana_split_pair_posts" }
+      .to raise_error(ArgumentError, /answer the whole\s+group or none/m)
+  end
+
   it "lets a fully-answered group through" do
     visit "/admin/paired_posts?q%5Bstatus_eq%5D=draft&q%5Bstarred_eq%5D=false"
 
