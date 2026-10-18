@@ -181,6 +181,14 @@ file "app/admin/posts.rb", <<~RUBY
                       extensions: { default: -> { [nil] } }
     end
 
+    ActiveAdmin.register Post, as: "BlankDefaultPolicedPost" do
+      # A blank default beside a validate:. Blank is no value - the URL cannot even carry it -
+      # so there is nothing for the validator to refuse.
+      filter :title_cont, as: :string,
+                          extensions: { default: "",
+                                        validate: ->(value) { "Letters only." unless value.match?(/\\A[a-z]+\\z/) } }
+    end
+
     ActiveAdmin.register Post, as: "BananaBlankDefaultPost" do
       # A blank default is a value ?q[k]= cannot round-trip (the blank is stripped on the way
       # back in) - it must stay out of the redirect, not loop it.

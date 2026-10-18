@@ -168,6 +168,16 @@ RSpec.describe "Filter value policies", type: :feature do
       expect(page).to have_content("Pick at most 90 days.")
     end
 
+    it "does not refuse a blank default" do
+      # Blank is no value: the URL cannot carry it and Ransack would strip it, so judging it
+      # raised over a default that never reaches a search.
+      visit "/admin/blank_default_policed_posts"
+
+      expect(URI.parse(page.current_url).query).to be_nil
+      expect(page).to have_content("keep me")
+      expect(page).to have_content("drop me")
+    end
+
     it "falls back to the generic text for a parameterized symbol it cannot interpolate" do
       # The docs invite a validate: that returns a gem scope symbol; the parameterized ones
       # have nothing to interpolate from, and raising there 500s the request the policy is
