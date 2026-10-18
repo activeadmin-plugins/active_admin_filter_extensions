@@ -171,17 +171,17 @@ RSpec.describe "Filter default values", type: :feature do
 
   describe "default_filters_notice" do
     it "tells the admin why the list is cut down" do
-      visit "/admin/notice_posts"
+      visit "/admin/colliding_notice_posts"
 
-      expect(page).to have_content("Showing the kept ones by default")
+      expect(page).to have_content("Showing published posts by default")
     end
 
     it "stays quiet once the admin has filtered for themselves" do
-      visit "/admin/notice_posts"
-      fill_in "q[title_cont]", with: "drop"
+      visit "/admin/colliding_notice_posts"
+      select "draft", from: "q[status_eq]"
       click_button "Filter"
 
-      expect(page).to have_no_content("Showing the kept ones by default")
+      expect(page).to have_no_content("Showing published posts by default")
     end
   end
 

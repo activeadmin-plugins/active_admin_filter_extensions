@@ -32,10 +32,6 @@ gsub_file "config/environment.rb",
           "$LOAD_PATH.unshift('#{gem_lib}')\n" \
           "require \"active_admin_filter_extensions\"\n"
 
-file "config/initializers/filter_extensions_notice.rb", <<~RUBY
-  require "active_admin_filter_extensions/notice"
-RUBY
-
 generate :"active_admin:install --skip-users"
 generate :"formtastic:install"
 
@@ -112,11 +108,6 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title
     end
 
-    ActiveAdmin.register Post, as: "NoticePost" do
-      default_filters_notice "Showing the kept ones by default"
-      filter :title, extensions: { default: "keep" }
-    end
-
     ActiveAdmin.register Post, as: "AmbiguousPost" do
       filter :published_date, as: :date_range, extensions: { default: Date.new(2026, 1, 1) }
     end
@@ -162,10 +153,48 @@ file "app/admin/posts.rb", <<~RUBY
       end
     end
 
+    ActiveAdmin.register Post, as: "WidenedNoticePost" do
+      default_filters_notice "Showing published posts by default"
+
+      filter :title_cont, as: :string
+      filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
+
+      # Widened: a status+title request still counts as one the defaults apply to - but the
+      # notice must only speak when a default actually reached the search.
+      controller do
+        def filter_defaults_apply?
+          super || (params[:q].keys - %w[status_eq title_cont]).empty?
+        end
+      end
+    end
+
     ActiveAdmin.register Post, as: "NoDefaultsPost" do
       filter :title
     end
 
+    ActiveAdmin.register Post, as: "CollidingNoticePost" do
+      # The notice on its DEFAULT flash key - the same :notice a batch action writes. Both have
+      # to coexist on the redirect: the arriving message wins, it names what just happened.
+      default_filters_notice "Showing published posts by default"
+
+      filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
+
+      collection_action :poke do
+        redirect_to collection_path, notice: "poked"
+      end
+    end
+
+    ActiveAdmin.register Post, as: "NoticePost" do
+      # Its own flash key, the way an app keeps the filters notice from colliding with the
+      # :notice a batch action or callback writes - both have to survive the redirect together.
+      default_filters_notice "Showing published posts by default", flash_key: :filters_notice
+
+      filter :status, as: :select, collection: %w[draft published], extensions: { default: "published" }
+
+      collection_action :poke do
+        redirect_to collection_path, notice: "poked"
+      end
+    end
   RUBY
 
 run "rm -rf test"

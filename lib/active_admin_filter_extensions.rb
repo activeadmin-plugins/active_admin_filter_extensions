@@ -8,6 +8,7 @@ require "active_admin_filter_extensions/search_keys"
 require "active_admin_filter_extensions/filter_defaults"
 require "active_admin_filter_extensions/filters_form"
 require "active_admin_filter_extensions/redirect"
+require "active_admin_filter_extensions/notice"
 
 module ActiveAdminFilterExtensions
 end
@@ -25,6 +26,8 @@ ActiveAdmin.before_load do |_app|
   ActiveAdmin::ResourceController.helper_method :filtering_params, :filter_default_values, :visible_filters
 
   ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtension
+  ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Notice
+  ActiveAdmin::Resource.include ActiveAdminFilterExtensions::NoticeResource
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Redirect
   ActiveAdmin::Filters::ViewHelper.prepend ActiveAdminFilterExtensions::ViewHelper
   ActiveAdmin::Filters::ActiveSidebar.prepend ActiveAdminFilterExtensions::ActiveSidebar

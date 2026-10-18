@@ -34,6 +34,14 @@ module ActiveAdminFilterExtensions
       defaults.merge(requested || {})
     end
 
+    # Whether any default actually reaches this request's search - what the notice announces.
+    def filter_defaults_engaged?
+      requested = requested_filtering_params || {}
+      # At least one default must actually reach the search: a widened apply? beside a
+      # request that answered every defaulted key itself engaged nothing.
+      filter_defaults_apply? && filter_default_values.keys.any? { |key| requested[key].nil? }
+    end
+
     # Whether the request is one the declared defaults should apply to. Override to widen it -
     # a resource that always carries its customer in `q`, say, still wants its defaults on the
     # first visit:

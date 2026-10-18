@@ -49,6 +49,16 @@ module ActiveAdminFilterExtensions
         # them all for sweeping, so they ride the 302 instead of dying with it.
         flash.keep
 
+        # This request is the one a declared notice belongs on, and it is about to answer 302,
+        # so the message is written to the travelling flash.
+        if (message = active_admin_config.default_filters_notice) &&
+           filter_defaults_engaged?
+          # On a shared key - the default is :notice, the same key a batch action writes - the
+          # arriving message wins: it names what just happened, the notice can wait.
+          key = active_admin_config.default_filters_notice_flash_key
+          flash[key] = ::MethodOrProcHelper.render_in_context(self, message) if flash[key].blank?
+        end
+
         redirect_to "#{request.path}?#{request.query_parameters.merge('q' => effective).to_query}"
       end
     end

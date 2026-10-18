@@ -132,4 +132,63 @@ RSpec.describe "The redirect", type: :feature do
 
   # Without this the redirect would silently eat every notice: the flash is set on the request
   # the defaults apply to, and that is the one that answers 302 - so it has to travel.
+  describe "a declared default_filters_notice" do
+    it "survives the redirect" do
+      visit "/admin/notice_posts"
+
+      expect(query_of(page.current_url)["q"]).to eq("status_eq" => "published")
+      expect(page).to have_content("Showing published posts by default")
+    end
+
+    it "does not eat a flash that arrived from another action" do
+      # Writing the notice loads the flash, and a loaded flash sweeps what came in with the
+      # request when it commits - here, on a 302 that renders nothing. The redirect keeps the
+      # arriving entries, so a batch action's message and the notice land together.
+      visit "/admin/notice_posts/poke"
+
+      expect(query_of(page.current_url)["q"]).to eq("status_eq" => "published")
+      expect(page).to have_content("poked")
+      expect(page).to have_content("Showing published posts by default")
+    end
+
+    it "yields its shared flash key to a message that arrived from another action" do
+      # On the default :notice key the notice and a batch action's message collide; the
+      # arriving one names what just happened, so it is the one the admin must see.
+      visit "/admin/colliding_notice_posts/poke"
+
+      expect(page).to have_content("poked")
+    end
+
+    it "still greets a bare visit on its default flash key" do
+      visit "/admin/colliding_notice_posts"
+
+      expect(page).to have_content("Showing published posts by default")
+    end
+
+    it "stays quiet on a widened request that overrode every default" do
+      # filter_defaults_apply? says yes, but the request answered every defaulted key itself -
+      # no default reached the search, and the notice must not claim otherwise.
+      visit "/admin/widened_notice_posts?q%5Bstatus_eq%5D=draft&q%5Btitle_cont%5D=drop"
+
+      expect(page).to have_content("drop me")
+      expect(page).to have_no_content("Showing published posts by default")
+    end
+
+    it "greets a widened request the defaults actually reached" do
+      visit "/admin/widened_notice_posts?q%5Btitle_cont%5D=keep"
+
+      expect(query_of(page.current_url)["q"])
+        .to eq("title_cont" => "keep", "status_eq" => "published")
+      expect(page).to have_content("Showing published posts by default")
+    end
+
+    it "does not greet a URL that already says what it shows" do
+      # The redirected-to URL opened directly - a pasted link. The recipient asked for exactly
+      # what the address says, so there is nothing to explain.
+      visit "/admin/notice_posts?q%5Bstatus_eq%5D=published"
+
+      expect(page).to have_no_content("Showing published posts by default")
+    end
+  end
+
 end
