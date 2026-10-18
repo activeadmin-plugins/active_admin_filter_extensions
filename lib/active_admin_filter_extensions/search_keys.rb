@@ -46,7 +46,7 @@ module ActiveAdminFilterExtensions
     # a way nothing reports: `Proc#[]` is `call`, so Formtastic asking `input_html[:multiple]`
     # invokes it, gets a truthy Hash back, and a `:select` derives `_in` rather than `_eq`.
     def filter_input_options(options, builder)
-      options = options.except(*FilterOptions::NOT_FOR_INPUT)
+      options = options.except(*FilterOptions::NOT_FOR_INPUT, *FilterOptions::EXTENSION_KEYS)
       return options unless options[:input_html].is_a?(Proc)
 
       options.merge(input_html: builder.template.instance_exec(&options[:input_html]))

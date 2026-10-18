@@ -10,6 +10,7 @@ module ActiveAdminFilterExtensions
     # `:if` / `:unless` are Active Admin's but are resolved by #visible_filters before the
     # form is given anything.
     NOT_FOR_INPUT = %i[extensions if unless].freeze
+    EXTENSION_KEYS = %i[default required with sanitize validate on_invalid max_range min message].freeze
 
     protected
 
@@ -25,11 +26,23 @@ module ActiveAdminFilterExtensions
       end.to_h { |attribute, options| [attribute, merge_filter_extensions(attribute, options)] }
     end
 
-    # Everything of the gem's lives under ONE filter option - extensions: - so the form never
-    # has to know the keys one by one and their names can never collide with Formtastic's own.
-    # Internally the sub-hash merges flat.
-    def merge_filter_extensions(_attribute, options)
-      options.merge(options[:extensions] || {})
+    # Everything of the gem's lives under ONE filter option - extensions: - so the form never has
+    # to know the keys one by one and their names can never collide with Formtastic's own
+    # (required:, most notably). Internally the sub-hash merges flat; a gem key left outside
+    # extensions: raises rather than silently meaning something else to Formtastic.
+    def merge_filter_extensions(attribute, options)
+      stray = options.keys.map(&:to_sym) & EXTENSION_KEYS
+      if stray.any?
+        raise ArgumentError, "filter :#{attribute}: #{stray.map(&:inspect).join(', ')} "                              "belong inside extensions: { ... }"
+      end
+
+      extensions = options[:extensions] || {}
+      unknown = extensions.keys.map(&:to_sym) - EXTENSION_KEYS
+      if unknown.any?
+        raise ArgumentError, "filter :#{attribute}: unknown extensions: #{unknown.map(&:inspect).join(', ')} - "                              "the gem ships #{EXTENSION_KEYS.map(&:inspect).join(', ')}"
+      end
+
+      options.merge(extensions)
     end
   end
 end

@@ -263,6 +263,16 @@ file "app/admin/posts.rb", <<~RUBY
                                             default: -> { Date.new(2026, 1, 1)..Date.new(2026, 2, 1) } }
     end
 
+    ActiveAdmin.register Post, as: "BananaFlatOptionPost" do
+      # A gem option left outside extensions: raises - flat, it would mean Formtastic things.
+      filter :title_cont, as: :string, default: "keep"
+    end
+
+    ActiveAdmin.register Post, as: "BananaPolicyKeyPost" do
+      # A typo inside extensions: raises instead of silently guarding nothing.
+      filter :title_cont, as: :string, extensions: { defult: "keep" }
+    end
+
     ActiveAdmin.register Post, as: "BananaSanitizeBuiltinPost" do
       # An unknown built-in name must raise, not fall through to a controller method call.
       filter :title_cont, as: :string, extensions: { sanitize: :shout }

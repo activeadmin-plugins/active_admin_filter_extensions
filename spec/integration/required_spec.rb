@@ -54,6 +54,15 @@ RSpec.describe "required: filters", type: :feature do
     expect(page).to have_no_content("keep me")
   end
 
+  it "keeps required: away from the rendered input" do
+    # required: is also a Formtastic option: leaked through the merged-flat policy keys it
+    # would mark the sidebar input HTML-required and block blank form submits in the browser.
+    visit "/admin/required_posts"
+
+    expect(page).to have_css("#filters_sidebar_section")
+    expect(page).to have_no_css("#filters_sidebar_section [required]", visible: :all)
+  end
+
   it "greets the imposed window with the notice" do
     visit "/admin/required_posts?q%5Btitle_cont%5D=me"
 
