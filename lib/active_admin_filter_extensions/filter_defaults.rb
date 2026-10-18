@@ -10,9 +10,14 @@ module ActiveAdminFilterExtensions
   module FilterDefaults
     # Ransack reads more than conditions out of q: `m` switches the combinator to OR - turning
     # a required, capped window into `window OR anything` - and `g` nests whole condition
-    # groups no value policy ever saw. No Active Admin filter form submits them; here they are
-    # a bypass, not an answer, and they are stripped before anything reads the request.
-    RANSACK_STRUCTURE = %w[m g c s conditions sorts groupings combinator].freeze
+    # groups no value policy ever saw. No Active Admin filter form submits them; where this gem
+    # guards the filters they are a bypass, not an answer, and they are stripped before anything
+    # reads the request. On a resource that declares nothing of this gem's there is no policy to
+    # bypass, and `q[g]` is the app's own standard OR workaround - see #strip_ransack_structure?.
+    RANSACK_STRUCTURE = %w[m g c conditions groupings combinator].freeze
+    # Sorting is not a condition: it reaches Ransack untouched, and it is not an answer to the
+    # question the defaults exist to answer.
+    RANSACK_SORT = %w[s sorts].freeze
 
     protected
 
@@ -111,7 +116,7 @@ module ActiveAdminFilterExtensions
     # Judged on the NORMALIZED request: a q holding nothing but blanks or structural keys is
     # a bare request on every format - the CSV gets no canonicalizing hop to say otherwise.
     def filter_defaults_apply?
-      requested_filtering_params.blank? && params[:commit].blank?
+      (requested_filtering_params || {}).except(*RANSACK_SORT).blank? && params[:commit].blank?
     end
 
     # @return [Hash] the search values declared with `filter ..., default:`
@@ -232,9 +237,22 @@ module ActiveAdminFilterExtensions
       requested = requested.transform_values do |value|
         value.is_a?(Array) ? value.reject { |element| element.blank? && element != false } : value
       end
+      strip_structure = strip_ransack_structure?
       requested.reject do |key, value|
-        RANSACK_STRUCTURE.include?(key.to_s) || (value.blank? && value != false)
+        (strip_structure && RANSACK_STRUCTURE.include?(key.to_s)) || (value.blank? && value != false)
       end
+    end
+
+    # Whether this resource declares anything of this gem's. Only then is a structural key a
+    # bypass of something; on every other resource it is the app's own search and stripping it
+    # silently widens the export to the whole table.
+    def strip_ransack_structure?
+      return @strip_ransack_structure if defined?(@strip_ransack_structure)
+
+      @strip_ransack_structure =
+        active_admin_config.require_any_filter_notice.present? ||
+        active_admin_config.default_filters_notice.present? ||
+        visible_filters.any? { |_attribute, options| options.key?(:extensions) }
     end
 
     # A default is a value, and where that value goes is the input's business - see SearchKeys.

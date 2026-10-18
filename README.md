@@ -325,7 +325,7 @@ visit, and a bookmarked URL pins the defaults of the day it was made rather than
 the code. Non-HTML requests (CSV, JSON) are never redirected; the defaults filter them all
 the same.
 
-Three prints in small type:
+Four prints in small type:
 
 * **Code that rewrites `q` in a `before_action`** (sanitizers that delete invalid ranges,
   say) runs after the redirect has already compared the request against the defaults - the
@@ -335,6 +335,12 @@ Three prints in small type:
 * **The redirect runs after authentication but before Active Admin's index authorization**,
   so an authenticated admin without read rights on a resource still receives the 302 whose
   Location spells out that resource's defaults. Keep per-role secrets out of defaults.
+* **Ransack's structural keys are stripped on resources that declare something of this
+  gem's.** `q[m]`, `q[g]` and `q[c]` turn a required, capped window into `window OR anything`
+  and nest conditions no value policy ever sees, so where a policy guards the filters they
+  are a bypass rather than an answer. A resource that declares no extension keeps them - the
+  hand-built `q[g]` OR link is the standard Active Admin workaround. Sorting (`q[s]`) is
+  never a condition and is never touched.
 * **Anything that reads `params[:q]` for the effective filters** (drill-down links, exports)
   should read `filtering_params` instead - on the rendered page they agree, but only
   `filtering_params` is also right on the non-redirected formats.
