@@ -25,6 +25,14 @@ RSpec.describe "on_invalid policies", type: :feature do
     end
   end
 
+  describe "a default against its own value policy" do
+    it "raises for a non-String default its validator refuses as submitted" do
+      # The URL will say the default as a String - that is the value to judge.
+      expect { visit "/admin/banana_integer_default_posts" }
+        .to raise_error(ArgumentError, /default that violates its own validate/)
+    end
+  end
+
   describe "values the URL cannot carry" do
     it "raises for a sanitizer with no fixpoint instead of redirect-looping" do
       expect { visit "/admin/banana_sanitize_posts?q%5Btitle_cont%5D=acme" }

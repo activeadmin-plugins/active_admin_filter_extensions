@@ -179,6 +179,34 @@ file "app/admin/posts.rb", <<~RUBY
                                     validate: ->(value) { value.match?(/\\d/) && "Title filter must not contain digits." } }
     end
 
+    ActiveAdmin.register Post, as: "BananaSanitizeBuiltinPost" do
+      # An unknown built-in name must raise, not fall through to a controller method call.
+      filter :title_cont, as: :string, extensions: { sanitize: :shout }
+    end
+
+    ActiveAdmin.register Post, as: "IntegerPost" do
+      # The built-in numeric pair every app hand-rolled: strip to digits, refuse what does
+      # not fit a PG int4.
+      filter :position_eq, as: :string, extensions: { sanitize: :digits, validate: :integer }
+    end
+
+    ActiveAdmin.register Post, as: "DigitDefaultPost" do
+      # The default is stored sanitized: what Ransack runs and what the URL says must be the
+      # value the policy produced, on the first pass and on every format.
+      filter :position_eq, as: :string, extensions: { default: "2-0a", sanitize: :digits, validate: :integer }
+    end
+
+    ActiveAdmin.register Post, as: "SignedDefaultPost" do
+      # A non-String default still goes through the sanitizer, as the String the URL will
+      # say - or the CSV and the HTML search different values.
+      filter :position_eq, as: :string, extensions: { default: -20, sanitize: :digits, validate: :integer }
+    end
+
+    ActiveAdmin.register Post, as: "BananaIntegerDefaultPost" do
+      # Its default is no String, but the URL will say it as one - validated as submitted.
+      filter :position_eq, as: :string, extensions: { default: 2_147_483_648, validate: :integer }
+    end
+
     ActiveAdmin.register Post, as: "BananaValidatedDefaultPost" do
       # Its default violates its own validate: - the suite proves that raises instead of
       # flashing itself on every bare visit, forever.

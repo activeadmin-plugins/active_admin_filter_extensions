@@ -95,10 +95,11 @@ module ActiveAdminFilterExtensions
         # Scalar values go through as the String the URL will say - a -20 under :digits must
         # search as "20" on every format. Multi-valued defaults are not scalar submissions.
         if sanitizer && !value.is_a?(Enumerable)
-          sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.to_s.dup).to_s
+          resolved = Policies::Sanitizers.resolve(sanitizer)
+          sanitized = ::MethodOrProcHelper.render_in_context(self, resolved, value.to_s.dup).to_s
           # The same fixpoint check submitted values face: without it the CSV searches the
           # once-sanitized value while the HTML converges on another, and nobody raises.
-          if ::MethodOrProcHelper.render_in_context(self, sanitizer, sanitized.dup).to_s != sanitized
+          if ::MethodOrProcHelper.render_in_context(self, resolved, sanitized.dup).to_s != sanitized
             raise ArgumentError,
                   "filter :#{attribute}'s sanitize: is not idempotent " \
                   "(#{value.inspect} -> #{sanitized.inspect} -> keeps changing) - " \
@@ -108,7 +109,7 @@ module ActiveAdminFilterExtensions
           result[key] = sanitized
         end
         next unless validator
-        next unless ::MethodOrProcHelper.render_in_context(self, validator, result[key].to_s)
+        next unless ::MethodOrProcHelper.render_in_context(self, Policies::Validators.resolve(validator), result[key].to_s)
 
         raise ArgumentError,
               "filter :#{attribute} declares a default that violates its own validate: " \
