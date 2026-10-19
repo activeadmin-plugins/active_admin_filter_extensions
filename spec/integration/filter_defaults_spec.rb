@@ -191,6 +191,33 @@ RSpec.describe "Filter default values", type: :feature do
 
       expect(page).to have_no_content("Showing published posts by default")
     end
+
+    describe "the app-wide key" do
+      # Deliberately a key no resource declares, so an example cannot pass by coincidence:
+      # NoticePost's own key is :filters_notice.
+      around do |example|
+        previous = ActiveAdminFilterExtensions.notice_flash_key
+        ActiveAdminFilterExtensions.notice_flash_key = :app_wide_notice
+        example.run
+        ActiveAdminFilterExtensions.notice_flash_key = previous
+      end
+
+      it "takes a notice that named no key of its own" do
+        # The resource says only the message; the app said where its notices go. Asserted on
+        # the rendered flash class, which is what the layout keys off.
+        visit "/admin/colliding_notice_posts"
+
+        expect(page).to have_css(".flash_app_wide_notice", text: "Showing published posts by default")
+        expect(page).to have_no_css(".flash_notice")
+      end
+
+      it "loses to the key the resource declared" do
+        visit "/admin/notice_posts"
+
+        expect(page).to have_css(".flash_filters_notice", text: "Showing published posts by default")
+        expect(page).to have_no_css(".flash_app_wide_notice")
+      end
+    end
   end
 
   describe "requests that carry no q of their own" do

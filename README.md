@@ -170,7 +170,17 @@ end
 ```
 
 The message is flashed only when the defaults actually took effect. Pass `flash_key:` to use
-something other than `:notice`.
+something other than `:notice`, or move the default for the whole application once:
+
+```ruby
+# config/initializers/active_admin_filter_extensions.rb
+ActiveAdminFilterExtensions.notice_flash_key = :filters_notice
+```
+
+Worth doing where the layout renders its own key for "why this page is cut down": Active Admin
+writes action results to `:notice`, and on a shared key the arriving message wins, so a batch
+action's result would silence the notice. The key is read when the notice is written and
+`flash_key:` on the resource still beats it.
 
 ## Required filters: the mandatory window
 

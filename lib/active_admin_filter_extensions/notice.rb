@@ -12,7 +12,12 @@ module ActiveAdminFilterExtensions
   # message is only flashed when the defaults actually took effect, so it stays quiet once the
   # admin has filtered for themselves.
   module Notice
-    def default_filters_notice(message, flash_key: :notice)
+    # The key this resource's notice goes under: what it declared, else the app-wide default.
+    def self.flash_key_for(config)
+      config.default_filters_notice_flash_key || ActiveAdminFilterExtensions.notice_flash_key
+    end
+
+    def default_filters_notice(message, flash_key: nil)
       # Declared on the resource rather than closed over, so that the redirect - which answers
       # the request the notice belongs on with a 302 - can find it and carry it across.
       config.default_filters_notice = message
@@ -27,7 +32,8 @@ module ActiveAdminFilterExtensions
         # default slice - the notice on top of it would be noise.
         next if filter_policy_errors.present?
 
-        flash.now[flash_key] = ::MethodOrProcHelper.render_in_context(self, message)
+        flash.now[Notice.flash_key_for(active_admin_config)] =
+          ::MethodOrProcHelper.render_in_context(self, message)
       end
     end
   end
