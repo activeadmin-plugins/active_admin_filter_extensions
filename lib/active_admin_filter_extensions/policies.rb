@@ -232,10 +232,29 @@ module ActiveAdminFilterExtensions
 
       # The filter's own predicate dropdown submits _gt/_lt/_not_eq and friends beside the
       # derived head key; a value policy guarding only the head leaves the same column one
-      # dropdown click from unpoliced. Siblings = request keys naming the same attribute.
+      # dropdown click from unpoliced. Siblings = request keys naming the same attribute,
+      # minus the predicates answered by a boolean rather than by a value of the attribute's
+      # own type: `?q[customer_id_null]=true` carries "true", which `sanitize: :digits`
+      # empties and `validate: :integer` refuses - the reset would then drop a condition a
+      # drill-down link spelled out. A boolean predicate the filter declares itself stays
+      # policed: that one its author asked for.
       def sibling_predicate_keys(q, keys)
         bases = keys.map { |key| strip_ransack_predicate(key) }
-        q.keys.select { |key| bases.include?(strip_ransack_predicate(key)) }
+        declared = keys.map(&:to_s)
+        q.keys.select do |key|
+          next false unless bases.include?(strip_ransack_predicate(key))
+
+          declared.include?(key.to_s) || !boolean_predicate?(key)
+        end
+      end
+
+      def boolean_predicate?(name)
+        # Without Ransack there is nothing to ask - and nothing is stripped either, so a
+        # sibling can only be the declared key itself.
+        return false unless defined?(::Ransack::Predicate)
+
+        predicate = ::Ransack::Predicate.detect_from_string(name.to_s)
+        predicate && ::Ransack::Predicate.named(predicate)&.type == :boolean
       end
 
       def strip_ransack_predicate(name)
