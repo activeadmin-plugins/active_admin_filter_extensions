@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "activeadmin"
+require "active_support/core_ext/object/deep_dup"
 require "active_admin_filter_extensions/version"
 
 # The violation messages live in plain i18n - config/locales/en.yml here, overridable by the
@@ -45,7 +46,8 @@ ActiveAdmin.before_load do |_app|
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::SearchKeys
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::RequiredFilters
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::FilterDefaults
-  ActiveAdmin::ResourceController.helper_method :filtering_params, :filter_default_values, :visible_filters
+  ActiveAdmin::ResourceController.helper_method :filtering_params, :applied_filter_params,
+                                                :filter_default_values, :visible_filters
 
   ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtension
   ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Policies::ResourcePolicyDSL
