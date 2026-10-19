@@ -17,6 +17,21 @@ require "active_admin_filter_extensions/policies"
 require "active_admin_filter_extensions/notice"
 
 module ActiveAdminFilterExtensions
+  class << self
+    # Where a filters notice goes when the resource does not say. Active Admin writes action
+    # results to :notice, and an app whose layout renders its own key for "why this page is
+    # cut down" would otherwise repeat `flash_key:` on every index that declares a notice:
+    #
+    #   ActiveAdminFilterExtensions.notice_flash_key = :notice_message
+    #
+    # Read when the notice is written, not when the resource is registered, so initializer
+    # order does not decide it.
+    attr_writer :notice_flash_key
+
+    def notice_flash_key
+      @notice_flash_key ||= :notice
+    end
+  end
 end
 
 # `add_filter` stores whatever options it is given without a whitelist, so `default:` needs no
