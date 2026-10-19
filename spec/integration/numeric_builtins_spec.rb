@@ -78,6 +78,19 @@ RSpec.describe "built-in numeric policies", type: :feature do
       expect(page).to have_no_content("drop me")
     end
 
+    it "leaves a boolean predicate of the same attribute to Ransack" do
+      # `?q[position_null]=true` is answered by "true", not by a value of the column's own
+      # type: the digits sanitizer would empty it and the integer validator refuse it, and the
+      # reset would drop a condition the admin's own drill-down link spelled out.
+      Post.create!(title: "no position", body: "no position body", status: "draft")
+
+      visit "/admin/integer_posts?q%5Bposition_null%5D=true"
+
+      expect(query_of(page.current_url)["q"]).to eq("position_null" => "true")
+      expect(page).to have_content("no position")
+      expect(page).to have_no_content("keep me")
+    end
+
     it "sanitizes a sibling predicate too" do
       visit "/admin/integer_posts?q%5Bposition_lt%5D=2%200a"
 
