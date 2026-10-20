@@ -53,6 +53,36 @@ RSpec.describe ActiveAdminFilterExtensions::DataAccess do
     end
   end
 
+  describe "#applied_filter_params" do
+    let(:filters) { { position_eq: { extensions: { default: "20" } } } }
+
+    it "reads by symbol what the request spelled as a String" do
+      expect(controller.send(:applied_filter_params)[:position_eq]).to eq("20")
+    end
+
+    it "hands out a copy, so a caller translating the values cannot rewrite the search" do
+      applied = controller.send(:applied_filter_params)
+      applied[:position_gt] = applied.delete(:position_eq)
+
+      expect(controller.send(:filtering_params)).to eq("position_eq" => "20")
+      expect(searched_with).to eq("position_eq" => "20")
+    end
+
+    context "when the request carries a value of its own" do
+      let(:filters) { { title_cont: {} } }
+      # Mutable on purpose: with_indifferent_access alone copies the Hash but hands out this
+      # very String, so editing it in place would reach back into the request.
+      let(:params) { { q: { "title_cont" => String.new("hello") } } }
+
+      it "copies the values too, so editing one in place cannot reach the request" do
+        controller.send(:applied_filter_params)[:title_cont].replace("bye")
+
+        expect(controller.send(:filtering_params)).to eq("title_cont" => "hello")
+        expect(searched_with).to eq("title_cont" => "hello")
+      end
+    end
+  end
+
   describe "a Hash default" do
     let(:filters) { { created_at: { as: :date_range, extensions: { default: { gteq: "2020-01-01" } } } } }
 

@@ -28,7 +28,7 @@ module ActiveAdminFilterExtensions
     # #filter_defaults_apply? which lets defaults through on a partly filtered request keeps
     # the values that were actually asked for.
     #
-    # @return [Hash, ActionController::Parameters] values passed to Ransack
+    # @return [Hash] values passed to Ransack
     def filtering_params
       requested = requested_filtering_params
       # Materialized on every path: computing it is also what validates, loudly, that every
@@ -54,6 +54,20 @@ module ActiveAdminFilterExtensions
       return requested || {} if defaults.blank?
 
       defaults.merge(requested || {})
+    end
+
+    # The same values, as an indifferent deep copy: readable by symbol and safe to mutate. A page
+    # that builds its own collection or its own links usually has to translate those values
+    # into whatever it talks to - renaming a key an input suffixed, turning a sentinel into a
+    # different predicate - and must not do that to the Hash #filtering_params itself returns,
+    # which is also what fills the filters form and decides the canonicalizing redirect.
+    #
+    # @return [ActiveSupport::HashWithIndifferentAccess]
+    def applied_filter_params
+      # deep_dup, not just with_indifferent_access: that copies the containers but keeps the
+      # value objects, so a `gsub!` or `replace` on a String value would reach back into the
+      # request's own and change what the next #filtering_params answers.
+      filtering_params.deep_dup.with_indifferent_access
     end
 
     def complete_with_groups(defaults)

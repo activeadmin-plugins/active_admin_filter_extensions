@@ -358,7 +358,10 @@ Four prints in small type:
   never a condition and is never touched.
 * **Anything that reads `params[:q]` for the effective filters** (drill-down links, exports)
   should read `filtering_params` instead - on the rendered page they agree, but only
-  `filtering_params` is also right on the non-redirected formats.
+  `filtering_params` is also right on the non-redirected formats. A page that translates those
+  values before passing them on - renaming a key an input suffixed, turning a sentinel into
+  another predicate - wants `applied_filter_params`: the same values as an indifferent copy,
+  safe to read by symbol and to mutate. Both are helpers, so a view can call them too.
 
 Tested against Active Admin 3.5 on Rails 8.0 and 8.1, under Ruby 3.3, 3.4 and 4.0.
 

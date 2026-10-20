@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "active_support/core_ext/object/blank"
+require "active_support/core_ext/object/deep_dup"
 require "active_support/core_ext/hash/indifferent_access"
 require "active_support/hash_with_indifferent_access"
 # Pure Ruby, no Active Admin boot required - `visible_filters` resolves `:if` / `:unless` with it.
