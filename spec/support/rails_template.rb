@@ -294,7 +294,7 @@ file "app/admin/posts.rb", <<~RUBY
       default_filters_notice "Showing the default window"
 
       # The capped window: never unbounded (required:), never wider than the cap, never before
-      # the retention floor - the didww-rs/pbx/nessie range guards, as options.
+      # the retention floor - the range guards apps write by hand, as options.
       filter :published_date, as: :date_range,
                               extensions: { required: true,
                                         max_range: 90.days,
@@ -412,7 +412,7 @@ file "app/admin/posts.rb", <<~RUBY
     end
 
     ActiveAdmin.register Post, as: "RejectPost" do
-      # :reject - the didww-api-3 add_integer_filter_check shape: flash and bounce back.
+      # :reject - the shape of a hand-written filter check: flash and bounce back.
       filter :title_cont, as: :string,
                           extensions: { on_invalid: :reject,
                                     validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
