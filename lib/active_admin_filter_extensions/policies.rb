@@ -140,9 +140,10 @@ module ActiveAdminFilterExtensions
         # Active Admin reads a q-less index as "this table has no rows" and renders the blank
         # slate, Create link and all; a present-but-empty q renders an empty result instead.
         params[:q] ||= {}
-        flash.now[:warning] =
-          notice.is_a?(String) ? notice : I18n.t(notice, scope: :active_admin_filter_extensions,
-                                                 default: :require_any_filter)
+        unless notice.is_a?(String)
+          notice = I18n.t(notice, scope: :active_admin_filter_extensions, default: :require_any_filter)
+        end
+        flash_filter_warning(notice)
       end
 
       # Ransack silently ignores a condition nobody declared - junk, a stale bookmark after
@@ -169,6 +170,13 @@ module ActiveAdminFilterExtensions
         end
       end
 
+      # On Active Admin 4 the warning shares :alert with the app's own messages. A message that
+      # arrived with the request wins, as it does for the notice.
+      def flash_filter_warning(message)
+        key = ActiveAdminFilterExtensions.warning_flash_key
+        flash.now[key] = message if flash[key].blank?
+      end
+
       def enforce_with_groups(q)
         # Membership is judged on the normalized request: a blank-array partner would pass a
         # raw present? check while Ransack drops it - half the group executing silently.
@@ -181,8 +189,7 @@ module ActiveAdminFilterExtensions
           filter_policy_errors << keys
           filter_policy_reset_keys.concat(keys)
           names = keys.map { |k| strip_ransack_predicate(k).humanize }.uniq.join(" and ")
-          flash.now[:warning] = I18n.t(:given_together, scope: :active_admin_filter_extensions,
-                                       filters: names)
+          flash_filter_warning(I18n.t(:given_together, scope: :active_admin_filter_extensions, filters: names))
           present.flatten.each { |key| q.delete(key) }
         end
       end

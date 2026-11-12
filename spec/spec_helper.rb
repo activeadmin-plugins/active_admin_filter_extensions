@@ -55,6 +55,9 @@ class FakeController
     @search_keys.fetch(attribute) { [attribute.to_s] }
   end
 
+  # The real one asks Active Admin's version, which this suite does not load.
+  def filter_ransack_options = {}
+
   prepend ActiveAdminFilterExtensions::DataAccess
   include ActiveAdminFilterExtensions::Policies::Controller
   include ActiveAdminFilterExtensions::FilterOptions

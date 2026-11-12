@@ -75,6 +75,11 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title, extensions: { default: "keep" }
     end
 
+    ActiveAdmin.register Post, as: "QuietDefaultPost" do
+      config.current_filters = false
+      filter :title, extensions: { default: "keep" }
+    end
+
     ActiveAdmin.register Post, as: "ScalarPost" do
       filter :title_cont, as: :string, extensions: { default: "keep" }
     end
@@ -289,7 +294,7 @@ file "app/admin/posts.rb", <<~RUBY
       default_filters_notice "Showing the default window"
 
       # The capped window: never unbounded (required:), never wider than the cap, never before
-      # the retention floor - the didww-rs/pbx/nessie range guards, as options.
+      # the retention floor - the range guards apps write by hand, as options.
       filter :published_date, as: :date_range,
                               extensions: { required: true,
                                         max_range: 90.days,
@@ -407,7 +412,7 @@ file "app/admin/posts.rb", <<~RUBY
     end
 
     ActiveAdmin.register Post, as: "RejectPost" do
-      # :reject - the didww-api-3 add_integer_filter_check shape: flash and bounce back.
+      # :reject - the shape of a hand-written filter check: flash and bounce back.
       filter :title_cont, as: :string,
                           extensions: { on_invalid: :reject,
                                     validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
@@ -508,6 +513,12 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title_cont, as: :string,
                           extensions: { validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
       filter :status, as: :select, collection: %w[draft published]
+
+      # Lands on the bare index, where the guard warns on the key Active Admin 4 also uses
+      # for :alert.
+      collection_action :poke do
+        redirect_to collection_path, alert: "poked"
+      end
     end
 
     ActiveAdmin.register Post, as: "EmptyDigitsPost" do
@@ -628,6 +639,16 @@ file "app/admin/posts.rb", <<~RUBY
       end
     end
   RUBY
+
+# Active Admin 4's flash partial renders only :error, :alert and :notice, with no class per key.
+# An app that moves the notice to a key of its own renders that key itself, as this one does.
+if Gem.loaded_specs["activeadmin"].version >= Gem::Version.new("4.0.0.beta1")
+  file "app/views/active_admin/_flash_messages.html.erb", <<~ERB
+    <% flash_messages.each do |type, message| %>
+      <div class="flash flash_<%= type %>"><%= message %></div>
+    <% end %>
+  ERB
+end
 
 run "rm -rf test"
 route "root to: 'admin/dashboard#index'"

@@ -32,6 +32,18 @@ module ActiveAdminFilterExtensions
     def notice_flash_key
       @notice_flash_key ||= :notice
     end
+
+    # Active Admin 4 moved the filters form helper and the Current Filters section.
+    def aa_v4?
+      return @aa_v4 if defined?(@aa_v4)
+
+      @aa_v4 = Gem::Version.new(ActiveAdmin::VERSION) >= Gem::Version.new("4.0.0.beta1")
+    end
+
+    # Active Admin 4's layout renders only the :error, :alert and :notice flash keys.
+    def warning_flash_key
+      aa_v4? ? :alert : :warning
+    end
   end
 end
 
@@ -49,7 +61,6 @@ ActiveAdmin.before_load do |_app|
   ActiveAdmin::ResourceController.helper_method :filtering_params, :applied_filter_params,
                                                 :filter_default_values, :visible_filters
 
-  ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtension
   ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Policies::ResourcePolicyDSL
   ActiveAdmin::Resource.include ActiveAdminFilterExtensions::Policies::ResourcePolicySettings
   ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Notice
@@ -58,6 +69,12 @@ ActiveAdmin.before_load do |_app|
   # decision - and therefore the URL - is computed from.
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Policies::Controller
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Redirect
-  ActiveAdmin::Filters::ViewHelper.prepend ActiveAdminFilterExtensions::ViewHelper
-  ActiveAdmin::Filters::ActiveSidebar.prepend ActiveAdminFilterExtensions::ActiveSidebar
+  if ActiveAdminFilterExtensions.aa_v4?
+    ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtensionV4
+    ActiveAdmin::FormHelper.prepend ActiveAdminFilterExtensions::ViewHelper
+  else
+    ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtension
+    ActiveAdmin::Filters::ViewHelper.prepend ActiveAdminFilterExtensions::ViewHelper
+    ActiveAdmin::Filters::ActiveSidebar.prepend ActiveAdminFilterExtensions::ActiveSidebar
+  end
 end
