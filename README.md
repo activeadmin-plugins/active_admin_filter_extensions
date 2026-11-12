@@ -182,6 +182,11 @@ writes action results to `:notice`, and on a shared key the arriving message win
 action's result would silence the notice. The key is read when the notice is written and
 `flash_key:` on the resource still beats it.
 
+On Active Admin 4 the stock layout renders only the `:error`, `:alert` and `:notice` flash
+keys, so a key of your own needs an override of `app/views/active_admin/_flash_messages.html.erb`
+that renders it. The `with:` and `require_any_filter` warnings go to `:alert` there, and to
+`:warning` on Active Admin 3.
+
 ## Required filters: the mandatory window
 
 Some tables must never be queried without a bound - a log partitioned by date, a CDR table
@@ -363,7 +368,16 @@ Four prints in small type:
   another predicate - wants `applied_filter_params`: the same values as an indifferent copy,
   safe to read by symbol and to mutate. Both are helpers, so a view can call them too.
 
-Tested against Active Admin 3.5 on Rails 8.0 and 8.1, under Ruby 3.3, 3.4 and 4.0.
+## Active Admin 4
+
+The gem works on Active Admin 3.5 and 4 from the same release; it ships no JavaScript or CSS.
+On Active Admin 4 the filters section keeps Active Admin's own `h3.filters-form-title`, and
+the Current Filters section (`#active_search_sidebar_section`) also shows when only defaults
+apply. Page objects can select the filters form by `[data-filter-extensions-form]` and, on
+Active Admin 4, its title by `[data-filter-extensions-title]`.
+
+Tested against Active Admin 3.5 and 4.0.0.beta23 on Rails 8.0 and 8.1, under Ruby 3.3, 3.4
+and 4.0.
 
 ## License
 
