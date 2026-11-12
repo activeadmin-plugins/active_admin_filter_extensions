@@ -16,7 +16,7 @@ Gem::Specification.new do |s|
                   "the URL."
 
   s.required_ruby_version = ">= 3.3"
-  s.add_dependency "activeadmin", ">= 3.5", "< 4"
+  s.add_dependency "activeadmin", ">= 3.5", "< 5"
 
   s.files         = `git ls-files`.split("\n")
   s.require_paths = ["lib"]
