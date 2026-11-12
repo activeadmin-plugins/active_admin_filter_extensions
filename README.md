@@ -379,6 +379,14 @@ Active Admin 4, its title by `[data-filter-extensions-title]`.
 Tested against Active Admin 3.5 and 4.0.0.beta23 on Rails 8.0 and 8.1, under Ruby 3.3, 3.4
 and 4.0.
 
+The suite runs on Active Admin 3.5 by default. The `AA` and `RAILS` variables pick other
+versions; `Gemfile.lock` is not committed, so re-resolve the bundle when switching:
+
+```sh
+AA=4.0.0.beta23 bundle update activeadmin
+AA=4.0.0.beta23 bundle exec rake spec
+```
+
 ## License
 
 MIT
