@@ -629,6 +629,16 @@ file "app/admin/posts.rb", <<~RUBY
     end
   RUBY
 
+# Active Admin 4's flash partial renders only :error, :alert and :notice, with no class per key.
+# An app that moves the notice to a key of its own renders that key itself, as this one does.
+if Gem.loaded_specs["activeadmin"].version >= Gem::Version.new("4.0.0.beta1")
+  file "app/views/active_admin/_flash_messages.html.erb", <<~ERB
+    <% flash_messages.each do |type, message| %>
+      <div class="flash flash_<%= type %>"><%= message %></div>
+    <% end %>
+  ERB
+end
+
 run "rm -rf test"
 route "root to: 'admin/dashboard#index'"
 rake "db:migrate"
