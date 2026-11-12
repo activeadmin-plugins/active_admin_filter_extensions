@@ -20,6 +20,13 @@ RSpec.describe "the filters sidebar", type: :feature do
     expect(page).to have_css(current_filters, text: "keep")
   end
 
+  it "keeps the Current Filters panel off where the resource turned it off" do
+    visit "/admin/quiet_default_posts"
+
+    expect(page).to have_css("#filters_sidebar_section")
+    expect(page).to have_no_css(current_filters)
+  end
+
   it "hides the Current Filters panel when nothing is filtered" do
     visit "/admin/no_defaults_posts"
 

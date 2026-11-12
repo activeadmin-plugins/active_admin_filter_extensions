@@ -75,6 +75,11 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title, extensions: { default: "keep" }
     end
 
+    ActiveAdmin.register Post, as: "QuietDefaultPost" do
+      config.current_filters = false
+      filter :title, extensions: { default: "keep" }
+    end
+
     ActiveAdmin.register Post, as: "ScalarPost" do
       filter :title_cont, as: :string, extensions: { default: "keep" }
     end

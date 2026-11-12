@@ -16,6 +16,8 @@ task :setup do
     -m spec/support/rails_template.rb
   ].join(" ")
 
+  # Plain `rake setup` has not activated the bundle, and Gem.loaded_specs needs it.
+  require "bundler/setup"
   # One app per Active Admin major: its installer writes different assets and initializers.
   aa_major = Gem.loaded_specs["activeadmin"].version.segments.first
   app_dir = "spec/rails/rails-#{Rails::VERSION::STRING}-aa#{aa_major}"

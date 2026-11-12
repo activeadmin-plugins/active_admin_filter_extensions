@@ -35,7 +35,9 @@ module ActiveAdminFilterExtensions
 
     # Active Admin 4 moved the filters form helper and the Current Filters section.
     def aa_v4?
-      Gem::Version.new(ActiveAdmin::VERSION) >= Gem::Version.new("4.0.0.beta1")
+      return @aa_v4 if defined?(@aa_v4)
+
+      @aa_v4 = Gem::Version.new(ActiveAdmin::VERSION) >= Gem::Version.new("4.0.0.beta1")
     end
 
     # Active Admin 4's layout renders only the :error, :alert and :notice flash keys.
