@@ -508,6 +508,12 @@ file "app/admin/posts.rb", <<~RUBY
       filter :title_cont, as: :string,
                           extensions: { validate: ->(value) { value.match?(/\\d/) && "Title must not contain digits." } }
       filter :status, as: :select, collection: %w[draft published]
+
+      # Lands on the bare index, where the guard warns on the key Active Admin 4 also uses
+      # for :alert.
+      collection_action :poke do
+        redirect_to collection_path, alert: "poked"
+      end
     end
 
     ActiveAdmin.register Post, as: "EmptyDigitsPost" do

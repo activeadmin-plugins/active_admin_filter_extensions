@@ -185,7 +185,9 @@ action's result would silence the notice. The key is read when the notice is wri
 On Active Admin 4 the stock layout renders only the `:error`, `:alert` and `:notice` flash
 keys, so a key of your own needs an override of `app/views/active_admin/_flash_messages.html.erb`
 that renders it. The `with:` and `require_any_filter` warnings go to `:alert` there, and to
-`:warning` on Active Admin 3.
+`:warning` on Active Admin 3. An `:alert` that arrived with the request wins over the warning.
+[activeadmin/activeadmin#9161](https://github.com/activeadmin/activeadmin/pull/9161) makes the
+layout render every key; until a release ships it, the override is still needed.
 
 ## Required filters: the mandatory window
 

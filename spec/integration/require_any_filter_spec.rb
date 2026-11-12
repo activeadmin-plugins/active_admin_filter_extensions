@@ -31,6 +31,14 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_link("Create one")
   end
 
+  it "leaves an alert that arrived with the request in place" do
+    # On Active Admin 4 the warning and an action's alert share the :alert key.
+    visit "/admin/picky_posts/poke"
+
+    expect(page).to have_content("poked")
+    expect(page).to have_no_content("keep me")
+  end
+
   it "answers once asked" do
     visit "/admin/picky_posts?q%5Btitle_cont%5D=keep"
 
