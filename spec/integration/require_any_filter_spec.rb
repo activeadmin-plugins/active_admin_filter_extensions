@@ -39,6 +39,14 @@ RSpec.describe "require_any_filter", type: :feature do
     expect(page).to have_no_content("keep me")
   end
 
+  it "still says why when a warning arrived with the request" do
+    # On Active Admin 3 the guard writes :warning, and its explanation must not give way there.
+    visit "/admin/picky_posts/warn"
+
+    expect(page).to have_content("You must specify at least one filter")
+    expect(page).to have_no_content("keep me")
+  end
+
   it "answers once asked" do
     visit "/admin/picky_posts?q%5Btitle_cont%5D=keep"
 

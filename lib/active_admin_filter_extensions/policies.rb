@@ -171,10 +171,13 @@ module ActiveAdminFilterExtensions
       end
 
       # On Active Admin 4 the warning shares :alert with the app's own messages. A message that
-      # arrived with the request wins, as it does for the notice.
+      # arrived with the request wins there, as it does for the notice. Active Admin 3 has a
+      # :warning key of its own, which the warning always overwrites.
       def flash_filter_warning(message)
         key = ActiveAdminFilterExtensions.warning_flash_key
-        flash.now[key] = message if flash[key].blank?
+        return if ActiveAdminFilterExtensions.aa_v4? && flash[key].present?
+
+        flash.now[key] = message
       end
 
       def enforce_with_groups(q)

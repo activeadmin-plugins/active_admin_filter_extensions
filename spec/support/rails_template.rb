@@ -519,6 +519,11 @@ file "app/admin/posts.rb", <<~RUBY
       collection_action :poke do
         redirect_to collection_path, alert: "poked"
       end
+
+      # An app's own :warning, the key Active Admin 3 shares with the guard.
+      collection_action :warn do
+        redirect_to collection_path, flash: { warning: "warned" }
+      end
     end
 
     ActiveAdmin.register Post, as: "EmptyDigitsPost" do
