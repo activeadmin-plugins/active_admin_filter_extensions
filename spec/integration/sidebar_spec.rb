@@ -34,6 +34,13 @@ RSpec.describe "the filters sidebar", type: :feature do
     expect(page).to have_no_css(current_filters)
   end
 
+  it "hides the Current Filters panel after a blank filter submit" do
+    visit "/admin/string_posts?commit=Filter"
+
+    expect(page).to have_css("#filters_sidebar_section")
+    expect(page).to have_no_css(current_filters)
+  end
+
   it "keeps the Current Filters panel for a filter from the request" do
     visit "/admin/no_defaults_posts?q%5Btitle_cont%5D=keep"
 

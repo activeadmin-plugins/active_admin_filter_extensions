@@ -39,7 +39,7 @@ module ActiveAdminFilterExtensions
       shown = section.options[:if]
       section.options[:if] = lambda {
         instance_exec(&shown) ||
-          (active_admin_config.current_filters_enabled? && filter_default_values.present?)
+          (active_admin_config.current_filters_enabled? && filtering_params.present?)
       }
       section
     end
@@ -59,7 +59,8 @@ module ActiveAdminFilterExtensions
   end
 
   # The Current Filters panel is gated on `params[:q]`, which stays empty when the values came
-  # from `filter ..., default:` rather than from the request.
+  # from `filter ..., default:` rather than from the request. The effective filters decide, not
+  # the configured defaults: a blank submit suppresses the defaults and filters nothing.
   module ActiveSidebar
     protected
 
@@ -68,7 +69,7 @@ module ActiveAdminFilterExtensions
         only: :index,
         if: -> {
           active_admin_config.current_filters_enabled? &&
-            (params[:q] || params[:scope] || filter_default_values.present?)
+            (params[:q] || params[:scope] || filtering_params.present?)
         }
       }
     end
