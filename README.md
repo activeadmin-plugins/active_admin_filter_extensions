@@ -28,6 +28,8 @@ filter :created_at, as: :date_time_range,
   floors on two-ended filters.
 * [`message:`](#value-policies-sanitize-and-validate) and plain-i18n defaults for every
   violation text.
+* [`none:`](#none-option) - a None option on a select filter, for the records whose attribute
+  is empty.
 * [`default_filters_notice`](#telling-the-admin-why) - the flash that tells the admin why the
   page shows a slice; [`require_any_filter`](#resource-level-guard) - an index that waits to
   be asked.
@@ -335,6 +337,39 @@ On a violation the policy is `:reset`: the offending key is dropped from `q`, th
 lands in `flash[:error]` (and rides the redirect), and the filter's declared `default:` - if
 any - refills through the ordinary merge. The defaults notice stays quiet on that render:
 the error already explains why the page shows the default slice.
+
+## None option
+
+A select filter cannot ask for the records whose attribute is empty: no value of its collection
+means that. `none:` adds the option, first in the list after the blank one:
+
+```ruby
+filter :account, as: :select, collection: proc { Account.order(:name) }, extensions: { none: true }
+filter :status, as: :select, multiple: true, collection: %w[draft published],
+       extensions: { none: "No status" } # the option's label
+```
+
+`true` labels the option from the i18n key `active_admin_filter_extensions.none` ("None"); a
+String is the label itself. Picking it searches `_null` on the filter's attribute. On a multiple
+select, None beside other values searches "any of these, or empty".
+
+The select submits a sentinel under its own key - `q[account_id_eq]=__none__` - and only the
+search is handed the `_null` condition. The URL, the form and the other extensions read the
+request as submitted: `required:` counts None as an answer, `sanitize:` and `validate:` are not
+handed the sentinel, and `default: -> { ActiveAdminFilterExtensions.none_value }` opens the
+index on the empty records. The Current Filters panel shows the label: "Account equals None".
+Move the sentinel where a real value could spell the same thing:
+
+```ruby
+ActiveAdminFilterExtensions.none_value = "__empty__"
+```
+
+Only a select that submits `_eq` or `_in` takes the option; `none:` on any other filter raises.
+
+A dependent select - the active_admin_theme searchable select with `depends_on:`, say - sends
+its parent's value to its options endpoint, so that endpoint is sent the sentinel too. It is
+applied there when the endpoint is an Active Admin index that declares the same filter with
+`none:`. An endpoint that searches `q` on its own is handed the sentinel as a plain value.
 
 ## The redirect
 

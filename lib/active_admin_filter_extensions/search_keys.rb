@@ -37,8 +37,7 @@ module ActiveAdminFilterExtensions
       raise_filter_default_error(attribute, "could not work out which search key it submits (#{e.class}: #{e.message}) - name the predicate with a Hash instead")
     end
 
-    def build_filter_input(attribute, options)
-      builder = filter_input_builder
+    def build_filter_input(attribute, options, builder = filter_input_builder)
       options = filter_input_options(options, builder)
       as = options[:as] || builder.send(:default_input_type, attribute)
       builder.send(:namespaced_input_class, as)

@@ -11,6 +11,7 @@ require "active_admin_filter_extensions/filter_options"
 require "active_admin_filter_extensions/search_keys"
 require "active_admin_filter_extensions/required_filters"
 require "active_admin_filter_extensions/filter_defaults"
+require "active_admin_filter_extensions/none_option"
 require "active_admin_filter_extensions/policies"
 
 # `DataAccess` only needs `params`, `active_admin_config` and something that answers `ransack`.
@@ -64,6 +65,7 @@ class FakeController
   include ActiveAdminFilterExtensions::SearchKeys
   include ActiveAdminFilterExtensions::RequiredFilters
   include ActiveAdminFilterExtensions::FilterDefaults
+  include ActiveAdminFilterExtensions::NoneOption
 end
 
 RSpec.configure do |config|

@@ -314,10 +314,11 @@ module ActiveAdminFilterExtensions
             end
 
             value = value.reject(&:blank?) if value.is_a?(Array)
+            none = policy_exempt_none_value(attribute, options, key)
 
             if (sanitizer = options[:sanitize])
               sanitizer = Sanitizers.resolve(sanitizer)
-              sanitized = sanitize_policed_value(attribute, sanitizer, value)
+              sanitized = sanitize_policed_value(attribute, sanitizer, value, none)
               value = sanitized
               q[key] = value
             end
@@ -328,7 +329,7 @@ module ActiveAdminFilterExtensions
             # Blank input array elements are discarded before searching - ?q[k][]=&q[k][]=draft
             # is the shape a multi-select submits - so remove them before sanitizing. Sanitized
             # elements are all judged, including ones the sanitizer emptied.
-            elements = value.is_a?(Array) ? value : [value]
+            elements = (value.is_a?(Array) ? value : [value]) - [none]
             message = elements.lazy
                               .filter_map { |element| ::MethodOrProcHelper.render_in_context(self, validator, element) }.first
             # nil AND false mean "valid" - `condition && "message"` is how Ruby writes these.
@@ -341,6 +342,15 @@ module ActiveAdminFilterExtensions
           end
       end
 
+      # The None option's sentinel is the gem's own, not a value the admin typed, so no value
+      # policy is handed it - under the none: filter's own key only, where the search rewrites
+      # it. Anywhere else it is a value like any other, and a way past the policy if exempted.
+      def policy_exempt_none_value(attribute, options, key)
+        return unless options[:none] && none_filter_keys[attribute.to_sym] == key.to_s
+
+        ActiveAdminFilterExtensions.none_value
+      end
+
       # A String, or an Array of Strings - what a multi-valued input submits.
       def policed_value_shape?(value)
         value.is_a?(String) || (value.is_a?(Array) && value.all?(String))
@@ -349,8 +359,9 @@ module ActiveAdminFilterExtensions
       # Element-wise for an Array, so a multi-valued filter is sanitized the way it is
       # submitted. On dup'd copies: a sanitizer that mutates in place and returns the same
       # object would otherwise be compared against itself and wave its loop through.
-      def sanitize_policed_value(attribute, sanitizer, value)
-        return value.map { |element| sanitize_policed_value(attribute, sanitizer, element) } if value.is_a?(Array)
+      def sanitize_policed_value(attribute, sanitizer, value, none = nil)
+        return value.map { |element| sanitize_policed_value(attribute, sanitizer, element, none) } if value.is_a?(Array)
+        return value if value == none
 
         sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.dup).to_s
         # The sanitized value lands in the URL and comes back for another pass - a sanitizer

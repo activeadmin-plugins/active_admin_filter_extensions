@@ -12,6 +12,7 @@ require "active_admin_filter_extensions/filter_options"
 require "active_admin_filter_extensions/search_keys"
 require "active_admin_filter_extensions/required_filters"
 require "active_admin_filter_extensions/filter_defaults"
+require "active_admin_filter_extensions/none_option"
 require "active_admin_filter_extensions/filters_form"
 require "active_admin_filter_extensions/redirect"
 require "active_admin_filter_extensions/policies"
@@ -31,6 +32,14 @@ module ActiveAdminFilterExtensions
 
     def notice_flash_key
       @notice_flash_key ||= :notice
+    end
+
+    # What the None option of a select filter submits (`extensions: { none: true }`). Move it
+    # where a real value of a filtered column could spell the same thing.
+    attr_writer :none_value
+
+    def none_value
+      @none_value ||= "__none__"
     end
 
     # Active Admin 4 moved the filters form helper and the Current Filters section.
@@ -58,8 +67,10 @@ ActiveAdmin.before_load do |_app|
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::SearchKeys
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::RequiredFilters
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::FilterDefaults
+  ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::NoneOption
   ActiveAdmin::ResourceController.helper_method :filtering_params, :applied_filter_params,
-                                                :filter_default_values, :visible_filters
+                                                :filter_default_values, :visible_filters,
+                                                :none_filter_form_options
 
   ActiveAdmin::ResourceDSL.include ActiveAdminFilterExtensions::Policies::ResourcePolicyDSL
   ActiveAdmin::Resource.include ActiveAdminFilterExtensions::Policies::ResourcePolicySettings
@@ -69,6 +80,7 @@ ActiveAdmin.before_load do |_app|
   # decision - and therefore the URL - is computed from.
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Policies::Controller
   ActiveAdmin::ResourceController.include ActiveAdminFilterExtensions::Redirect
+  ActiveAdmin::Filters::Active.prepend ActiveAdminFilterExtensions::CurrentFilters
   if ActiveAdminFilterExtensions.aa_v4?
     ActiveAdmin::Resource.prepend ActiveAdminFilterExtensions::ResourceExtensionV4
     ActiveAdmin::FormHelper.prepend ActiveAdminFilterExtensions::ViewHelper

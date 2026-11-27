@@ -54,7 +54,63 @@ module ActiveAdminFilterExtensions
   # method, so that this gem carries no copy of a method body that belongs to Active Admin.
   module ViewHelper
     def active_admin_filters_form_for(search, filters, options = {})
-      super(search, filters.transform_values { |opts| FilterOptions.input_options(opts) }, options)
+      filters = filters.to_h do |attribute, opts|
+        # Asked of the controller only for a none: filter - the helper exists on resource pages,
+        # and this method is also mixed into views that are not one.
+        opts = none_filter_form_options(attribute, opts, search, self) if opts[:none]
+        [attribute, FilterOptions.input_options(opts)]
+      end
+      super(search, filters, options)
+    end
+  end
+
+  # Current Filters lists the search's top-level conditions. A None option is a `_null` there,
+  # reading "is null 1" - and beside other values it is in an OR grouping, which is not listed
+  # at all. Prepended to ActiveAdmin::Filters::Active, the one class both versions list from.
+  module CurrentFilters
+    def initialize(resource, search)
+      super
+      labels = search.instance_variable_get(NoneOption::LABELS)
+      return if labels.blank?
+
+      filters.each { |filter| name_none_filter(filter, labels[filter.condition.key]) }
+      search.base.groupings.each do |grouping|
+        null = grouping.conditions.find { |condition| labels.key?(condition.key) }
+        next unless null
+
+        (grouping.conditions - [null]).each do |condition|
+          filters << name_none_filter(build_filters([condition]).first, labels[null.key])
+        end
+      end
+    end
+
+    private
+
+    def name_none_filter(filter, label)
+      return filter unless label
+
+      filter.extend(NoneActiveFilter).none_label = label
+      filter
+    end
+  end
+
+  # One Current Filters entry of a None option: "Account equals None" for the `_null` alone,
+  # "Status in None and draft" for the values chosen beside it.
+  module NoneActiveFilter
+    attr_writer :none_label
+
+    def values
+      [@none_label] + (none_alone? ? [] : super.to_a)
+    end
+
+    def predicate_name
+      none_alone? ? ::Ransack::Translate.predicate("eq") : super
+    end
+
+    private
+
+    def none_alone?
+      condition.predicate.name == "null"
     end
   end
 
