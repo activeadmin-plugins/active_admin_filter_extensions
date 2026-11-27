@@ -4,8 +4,8 @@ desc "Creates a test rails app for the specs to run against"
 task :setup do
   require "rails/version"
 
-  # The template throws the generated Gemfile away, so the app runs under this gem's sprockets
-  # bundle with no importmap-rails. Without --skip-javascript, Rails 8.1 writes
+  # The template throws the generated Gemfile away, so the app runs under this gem's bundle,
+  # which has no importmap-rails on Active Admin 3. Without --skip-javascript, Rails 8.1 writes
   # `stale_when_importmap_changes` into ApplicationController and booting it raises NameError.
   args = %w[
     --skip-spring
@@ -16,7 +16,11 @@ task :setup do
     -m spec/support/rails_template.rb
   ].join(" ")
 
-  app_dir = "spec/rails/rails-#{Rails::VERSION::STRING}"
+  # Plain `rake setup` has not activated the bundle, and Gem.loaded_specs needs it.
+  require "bundler/setup"
+  # One app per Active Admin major: its installer writes different assets and initializers.
+  aa_major = Gem.loaded_specs["activeadmin"].version.segments.first
+  app_dir = "spec/rails/rails-#{Rails::VERSION::STRING}-aa#{aa_major}"
   # From scratch, always: `rails new` git-inits the app, so a nested repo survives
   # `git clean -fdx` and the generator would then write into the surviving tree - leaving a
   # stale resource behind a freshly stamped digest, which is a green the stamp exists to deny.

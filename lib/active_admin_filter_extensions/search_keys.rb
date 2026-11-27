@@ -60,8 +60,15 @@ module ActiveAdminFilterExtensions
     # time it is called, and every defaulted filter would pay for another one.
     def filter_input_builder
       @filter_input_builder ||= ::ActiveAdmin::Filters::FormBuilder.new(
-        :q, active_admin_config.resource_class.ransack({}), view_context, {}
+        :q, active_admin_config.resource_class.ransack({}, **filter_ransack_options), view_context, {}
       )
+    end
+
+    # What Active Admin passes to Ransack next to the search: version 4 hands over its
+    # authorization adapter, so a model's `ransackable_attributes(auth_object)` can depend on
+    # the admin; version 3 passes nothing.
+    def filter_ransack_options
+      ActiveAdminFilterExtensions.aa_v4? ? { auth_object: active_admin_authorization } : {}
     end
 
     def raise_filter_default_error(attribute, message)

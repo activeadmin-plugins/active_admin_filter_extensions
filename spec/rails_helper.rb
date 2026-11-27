@@ -12,7 +12,8 @@ Bundler.setup
 ENV["RAILS_ENV"] = "test"
 require "rails"
 ENV["RAILS"] = Rails.version
-ENV["RAILS_ROOT"] = File.expand_path("rails/rails-#{ENV['RAILS']}", __dir__)
+aa_major = Gem.loaded_specs["activeadmin"].version.segments.first
+ENV["RAILS_ROOT"] = File.expand_path("rails/rails-#{ENV['RAILS']}-aa#{aa_major}", __dir__)
 
 unless File.exist?(ENV["RAILS_ROOT"])
   # A generation that dies midway leaves a partial app the File.exist? guard would then skip

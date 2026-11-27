@@ -48,7 +48,7 @@ RSpec.describe "with: filters", type: :feature do
     # PairedPost declares with: on both members - the two declarations are one group.
     visit "/admin/paired_posts?q%5Bstatus_eq%5D=draft"
 
-    expect(page).to have_css(".flash_warning", count: 1)
+    expect(page).to have_css(".flash_#{ActiveAdminFilterExtensions.warning_flash_key}", count: 1)
   end
 
   it "does not count a blank-array partner as answered" do
