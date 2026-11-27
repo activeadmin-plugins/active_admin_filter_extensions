@@ -10,7 +10,7 @@ module ActiveAdminFilterExtensions
     # `:if` / `:unless` are Active Admin's but are resolved by #visible_filters before the
     # form is given anything.
     NOT_FOR_INPUT = %i[extensions if unless].freeze
-    EXTENSION_KEYS = %i[default required with sanitize validate on_invalid max_range min message].freeze
+    EXTENSION_KEYS = %i[default required with sanitize validate on_invalid max_range min message none].freeze
     # required: and min: are documented Formtastic input options in their own right. The gem
     # answers to them only INSIDE extensions:, so flat they are the host's: no stray-key raise,
     # no policy, straight through to the input.

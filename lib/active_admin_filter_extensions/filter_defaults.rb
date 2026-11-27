@@ -203,16 +203,18 @@ module ActiveAdminFilterExtensions
         value = result[key]
         next if value.nil?
 
+        none = policy_exempt_none_value(attribute, options, key)
+
         # Judged the way the URL will say it: a scalar as the String it becomes, an Array
         # element by element - the shape a multi-valued input submits.
         if sanitizer
           resolved = Policies::Sanitizers.resolve(sanitizer)
-          result[key] = sanitize_default_value(attribute, resolved, value)
+          result[key] = sanitize_default_value(attribute, resolved, value, none)
         end
         next unless validator
 
         resolved_validator = Policies::Validators.resolve(validator)
-        next unless default_value_strings(result[key])
+        next unless (default_value_strings(result[key]) - [none])
                     .any? { |string| ::MethodOrProcHelper.render_in_context(self, resolved_validator, string) }
 
         raise ArgumentError,
@@ -233,9 +235,9 @@ module ActiveAdminFilterExtensions
       Array.wrap(value).map(&:to_s).reject(&:blank?)
     end
 
-    def sanitize_default_value(attribute, sanitizer, value)
-      return value.map { |element| sanitize_default_value(attribute, sanitizer, element) } if value.is_a?(Array)
-      return value if value.is_a?(Enumerable)
+    def sanitize_default_value(attribute, sanitizer, value, none = nil)
+      return value.map { |element| sanitize_default_value(attribute, sanitizer, element, none) } if value.is_a?(Array)
+      return value if value.is_a?(Enumerable) || value == none
 
       sanitized = ::MethodOrProcHelper.render_in_context(self, sanitizer, value.to_s.dup).to_s
       # The same fixpoint check submitted values face: without it the CSV searches the

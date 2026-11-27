@@ -8,3 +8,5 @@ en:
     before_floor: "%{filter} filter cannot start before %{floor}."
     given_together: "%{filters} filters must be given together."
     require_any_filter: "You must specify at least one filter"
+    # The label of a select filter's None option (`extensions: { none: true }`).
+    none: "None"

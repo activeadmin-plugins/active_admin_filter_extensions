@@ -7,13 +7,17 @@ FileUtils.mkdir_p("app/assets/config")
 File.write("app/assets/config/manifest.js", "//= link_tree ../images\n")
 
 # One column per filter input type, so every input can be exercised against a real index.
+# account_id is a plain nullable column rather than a reference: a post without an account is
+# what the None option filters for.
 generate :model,
          "post title:string body:text status:string position:integer " \
-         "published_date:date starred:boolean --force"
+         "published_date:date starred:boolean account_id:integer --force"
+generate :model, "account name:string --force"
 
 inject_into_file "app/models/post.rb",
+                 "  belongs_to :account, optional: true\n" \
                  "  def self.ransackable_attributes(auth_object = nil)\n" \
-                 "    %w[id title body status position published_date starred]\n" \
+                 "    %w[id title body status position published_date starred account_id]\n" \
                  "  end\n" \
                  "  def self.ransackable_associations(auth_object = nil)\n" \
                  "    []\n" \
@@ -618,6 +622,42 @@ file "app/admin/posts.rb", <<~RUBY
 
     ActiveAdmin.register Post, as: "NoDefaultsPost" do
       filter :title
+    end
+
+    ActiveAdmin.register Post, as: "NonePost" do
+      # The None option on a single and on a multiple select: a relation behind a Proc with the
+      # shipped label, an Array with the filter's own.
+      filter :account, as: :select, collection: proc { Account.order(:name) }, extensions: { none: true }
+      filter :status, as: :select, multiple: true, collection: %w[draft published],
+                      extensions: { none: "No status" }
+    end
+
+    ActiveAdmin.register Post, as: "BananaNonePost" do
+      # A :string filter has no option to add - the suite proves that raises.
+      filter :title_cont, as: :string, extensions: { none: true }
+    end
+
+    ActiveAdmin.register Post, as: "RequiredNonePost" do
+      # "Without an account" is an answer to a required filter, not its absence.
+      filter :title_cont, as: :string
+      filter :account, as: :select, collection: proc { Account.order(:name) },
+                       extensions: { none: true, required: true,
+                                     default: -> { Account.find_by(name: "Acme")&.id } }
+    end
+
+    ActiveAdmin.register Post, as: "DefaultNonePost" do
+      # The sentinel as the default: the index opens on the posts without an account.
+      filter :account, as: :select, collection: proc { Account.order(:name) },
+                       extensions: { none: true, default: -> { ActiveAdminFilterExtensions.none_value } }
+    end
+
+    ActiveAdmin.register Post, as: "PolicedNonePost" do
+      # Value policies beside the None option: the sentinel is not a value the admin typed, so
+      # neither policy is handed it - :digits would empty it, :integer would refuse it.
+      filter :account, as: :select, collection: proc { Account.order(:name) },
+                       extensions: { none: true, validate: :integer }
+      filter :position, as: :select, multiple: true, collection: [1, 20],
+                        extensions: { none: true, sanitize: :digits, validate: :integer }
     end
 
     ActiveAdmin.register Post, as: "CollidingNoticePost" do
